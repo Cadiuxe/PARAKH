@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { MOCK_STUDENT } from "@/lib/mock-data";
 
 export interface NavItem {
   title: string;
@@ -135,11 +136,11 @@ export function SidebarContent() {
         <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/40">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-xs">
-              AS
+              {MOCK_STUDENT.name.split(" ").map((w: string) => w[0]).join("")}
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-semibold text-foreground">Arjun Sharma</span>
-              <span className="text-[10px] text-muted-foreground">CS-2026-042</span>
+              <span className="text-xs font-semibold text-foreground">{MOCK_STUDENT.name}</span>
+              <span className="text-[10px] text-muted-foreground">{MOCK_STUDENT.rollNumber}</span>
             </div>
           </div>
           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">

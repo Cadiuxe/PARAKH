@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Settings, Sliders, Bell, Moon, User, Save } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
+import { MOCK_STUDENT } from "@/lib/mock-data";
 
 export default function SettingsPage() {
   const [adaptiveStrategy, setAdaptiveStrategy] = useState("heuristic");
@@ -84,12 +85,12 @@ export default function SettingsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
-              <span className="text-muted-foreground block mb-1">Student Name</span>
-              <div className="p-2.5 rounded-lg border border-border/60 bg-muted/30 font-medium">Arjun Sharma</div>
+              <span className="text-muted-foreground block mb-1">Name</span>
+              <div className="p-2.5 rounded-lg border border-border/60 bg-muted/30 font-medium">{MOCK_STUDENT.name}</div>
             </div>
             <div>
-              <span className="text-muted-foreground block mb-1">Roll Number</span>
-              <div className="p-2.5 rounded-lg border border-border/60 bg-muted/30 font-medium">CS-2026-042</div>
+              <span className="text-muted-foreground block mb-1">Identifier</span>
+              <div className="p-2.5 rounded-lg border border-border/60 bg-muted/30 font-medium">{MOCK_STUDENT.rollNumber}</div>
             </div>
           </div>
         </Card>

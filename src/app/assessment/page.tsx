@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card } from "@/components/ui/card";
@@ -19,45 +19,65 @@ import {
   ChevronRight,
   Lightbulb,
   Target,
+  Zap,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
-import { MOCK_ASSESSMENT_QUESTIONS, AssessmentQuestion } from "@/lib/mock-data";
+import {
+  selectNextQuestion,
+  updateAbility,
+  questionScore,
+  INITIAL_ABILITY,
+  TIMER_SECONDS,
+  BASE_CORRECT_SCORE,
+  SPEED_BONUS_MAX,
+} from "@/lib/adaptive-engine";
+import { AssessmentQuestion } from "@/lib/mock-data";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = "setup" | "question" | "explanation" | "complete";
+type Phase = "setup" | "question" | "complete";
 
 interface SessionResult {
   questionId: string;
-  selectedIndex: number;
+  question: AssessmentQuestion;
+  selectedIndex: number; // -1 = timed out
   correct: boolean;
+  abilityBefore: number;
+  abilityAfter: number;
+  timeRemaining: number;
+  base: number;
+  bonus: number;
+  score: number;
 }
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const TOPICS = ["Mixed", "DSA", "DBMS", "OS", "CN"] as const;
 const QUESTION_COUNTS = [5, 10, 15] as const;
-const TIMER_DURATION = 90; // seconds
 
-// Difficulty colour helper
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function difficultyColor(level: number) {
   if (level <= 2) return "bg-emerald-500/10 border-emerald-500/30 text-emerald-400";
   if (level === 3) return "bg-amber-500/10 border-amber-500/30 text-amber-400";
   return "bg-red-500/10 border-red-500/30 text-red-400";
 }
 
-// ─── Sub-screens ─────────────────────────────────────────────────────────────
+function formatTime(secs: number) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
-function SetupScreen({
-  onStart,
-}: {
-  onStart: (topic: string, count: number) => void;
-}) {
+// ─── Setup Screen ─────────────────────────────────────────────────────────────
+
+function SetupScreen({ onStart }: { onStart: (topic: string, count: number) => void }) {
   const [topic, setTopic] = useState<string>("Mixed");
   const [count, setCount] = useState<number>(5);
 
   return (
     <div className="max-w-2xl mx-auto space-y-8 py-4">
-      {/* Header */}
       <div className="text-center space-y-2">
         <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 mx-auto">
           <BrainCircuit className="h-7 w-7" />
@@ -66,8 +86,8 @@ function SetupScreen({
           Start Adaptive Assessment
         </h1>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
-          The engine selects questions dynamically based on your responses and
-          adjusts difficulty in real time.
+          Questions adapt to your ability in real time. Each correct answer increases
+          difficulty; incorrect answers recalibrate it.
         </p>
       </div>
 
@@ -116,11 +136,22 @@ function SetupScreen({
           </div>
         </div>
 
+        {/* Scoring info */}
+        <div className="rounded-lg bg-muted/30 border border-border/50 p-3 text-xs text-muted-foreground space-y-1">
+          <div className="flex items-center gap-1.5 font-semibold text-foreground mb-1">
+            <Zap className="h-3.5 w-3.5 text-indigo-400" />
+            Scoring
+          </div>
+          <p>Correct answer: <span className="text-foreground font-medium">100 base points</span></p>
+          <p>Speed bonus: up to <span className="text-indigo-400 font-medium">+{SPEED_BONUS_MAX} pts</span> for answering quickly</p>
+          <p>Incorrect / timed out: <span className="text-muted-foreground">0 points</span></p>
+        </div>
+
         {/* Info row */}
         <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t border-border/40">
           <span className="flex items-center gap-1.5">
             <Clock className="h-3.5 w-3.5 text-indigo-400" />
-            90 sec / question
+            {TIMER_SECONDS}s per question
           </span>
           <span className="flex items-center gap-1.5">
             <Target className="h-3.5 w-3.5 text-emerald-400" />
@@ -146,84 +177,98 @@ function QuestionScreen({
   question,
   questionIndex,
   totalQuestions,
+  currentAbility,
   onAnswer,
 }: {
   question: AssessmentQuestion;
   questionIndex: number;
   totalQuestions: number;
-  onAnswer: (selectedIndex: number) => void;
+  currentAbility: number;
+  onAnswer: (selectedIndex: number, timeRemaining: number) => void;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(TIMER_DURATION);
+  const [timeLeft, setTimeLeft] = useState(TIMER_SECONDS);
+  const [timeAtSubmit, setTimeAtSubmit] = useState(0);
 
-  // Reset state when question changes
+  // Reset on question change
   useEffect(() => {
     setSelected(null);
     setSubmitted(false);
-    setTimeLeft(TIMER_DURATION);
+    setTimeLeft(TIMER_SECONDS);
+    setTimeAtSubmit(0);
   }, [question.id]);
 
-  // Timer
+  // Countdown timer — runs every second when not submitted
   useEffect(() => {
     if (submitted) return;
     if (timeLeft <= 0) {
-      // Auto-submit with no selection (counts as wrong)
+      // Timer expired: auto-submit as timed out
+      setTimeAtSubmit(0);
       setSubmitted(true);
-      setTimeout(() => onAnswer(-1), 1200);
       return;
     }
-    const t = setTimeout(() => setTimeLeft((p) => p - 1), 1000);
-    return () => clearTimeout(t);
-  }, [timeLeft, submitted, onAnswer]);
+    const id = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
+    return () => clearTimeout(id);
+  }, [timeLeft, submitted]);
 
-  const progress = ((questionIndex) / totalQuestions) * 100;
-  const timerPct = (timeLeft / TIMER_DURATION) * 100;
-  const isCorrect = selected === question.correctOptionIndex;
+  const isCorrect = selected !== null && selected === question.correctOptionIndex;
+  const timerPct = (timeLeft / TIMER_SECONDS) * 100;
+  const progress = (questionIndex / totalQuestions) * 100;
+
+  // Compute score to show after submission
+  const scored = submitted
+    ? questionScore(isCorrect, timeAtSubmit, TIMER_SECONDS)
+    : null;
 
   const handleSubmit = () => {
     if (selected === null || submitted) return;
+    setTimeAtSubmit(timeLeft);
     setSubmitted(true);
   };
 
   const handleNext = () => {
-    onAnswer(selected ?? -1);
+    const finalTimeRemaining = submitted ? timeAtSubmit : 0;
+    onAnswer(selected ?? -1, finalTimeRemaining);
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5">
-      {/* Progress bar */}
+    <div className="max-w-3xl mx-auto space-y-4">
+      {/* Progress & timer row */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
-            Question <span className="font-semibold text-foreground">{questionIndex + 1}</span>{" "}
+            Question{" "}
+            <span className="font-semibold text-foreground">{questionIndex + 1}</span>{" "}
             of {totalQuestions}
           </span>
           <span
-            className={`flex items-center gap-1 font-mono font-semibold ${
-              timeLeft <= 15 ? "text-red-400" : "text-foreground"
+            className={`flex items-center gap-1 font-mono font-semibold tabular-nums ${
+              timeLeft <= 15 ? "text-red-400" : timeLeft <= 30 ? "text-amber-400" : "text-foreground"
             }`}
           >
             <Clock className="h-3.5 w-3.5" />
-            {String(Math.floor(timeLeft / 60)).padStart(2, "0")}:
-            {String(timeLeft % 60).padStart(2, "0")}
+            {formatTime(timeLeft)}
           </span>
         </div>
+
+        {/* Assessment progress bar */}
         <Progress value={progress} className="h-1.5 bg-muted" />
+
         {/* Timer bar */}
         <div className="w-full h-0.5 bg-muted rounded-full overflow-hidden">
           <div
-            className={`h-full transition-all duration-1000 ${
-              timerPct > 40 ? "bg-indigo-500" : timerPct > 15 ? "bg-amber-500" : "bg-red-500"
+            className={`h-full rounded-full ${
+              timerPct > 40 ? "bg-indigo-500" : timerPct > 17 ? "bg-amber-500" : "bg-red-500"
             }`}
-            style={{ width: `${timerPct}%` }}
+            style={{ width: `${timerPct}%`, transition: "width 1s linear" }}
           />
         </div>
       </div>
 
       {/* Question card */}
       <Card className="p-6 border border-border/80 bg-card shadow-md space-y-5">
-        {/* Meta row */}
+        {/* Meta badges */}
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" className="text-[10px] border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
             {question.topic}
@@ -231,10 +276,7 @@ function QuestionScreen({
           <Badge variant="outline" className="text-[10px] border-border/60 text-muted-foreground">
             {question.subtopic}
           </Badge>
-          <Badge
-            variant="outline"
-            className={`text-[10px] ${difficultyColor(question.difficultyLevel)}`}
-          >
+          <Badge variant="outline" className={`text-[10px] ${difficultyColor(question.difficultyLevel)}`}>
             Level {question.difficultyLevel} — {question.difficultyLabel}
           </Badge>
         </div>
@@ -247,28 +289,27 @@ function QuestionScreen({
         {/* Options */}
         <div className="space-y-2.5">
           {question.options.map((option, idx) => {
-            let optionClass =
-              "w-full text-left p-4 rounded-xl border text-sm font-medium transition-all cursor-pointer ";
-
+            let cls =
+              "w-full text-left p-3.5 rounded-xl border text-sm font-medium transition-all ";
             if (!submitted) {
-              optionClass +=
+              cls +=
                 selected === idx
-                  ? "border-indigo-500 bg-indigo-500/10 text-foreground"
-                  : "border-border/60 bg-muted/20 text-muted-foreground hover:border-indigo-500/50 hover:text-foreground hover:bg-muted/40";
+                  ? "border-indigo-500 bg-indigo-500/10 text-foreground cursor-pointer"
+                  : "border-border/60 bg-muted/20 text-muted-foreground hover:border-indigo-500/50 hover:text-foreground hover:bg-muted/40 cursor-pointer";
             } else {
               if (idx === question.correctOptionIndex) {
-                optionClass += "border-emerald-500 bg-emerald-500/10 text-emerald-300";
+                cls += "border-emerald-500 bg-emerald-500/10 text-emerald-300";
               } else if (idx === selected && !isCorrect) {
-                optionClass += "border-red-500 bg-red-500/10 text-red-300";
+                cls += "border-red-500 bg-red-500/10 text-red-300";
               } else {
-                optionClass += "border-border/40 bg-muted/10 text-muted-foreground/50";
+                cls += "border-border/30 bg-muted/10 text-muted-foreground/50 cursor-default";
               }
             }
 
             return (
               <button
                 key={idx}
-                className={optionClass}
+                className={cls}
                 onClick={() => !submitted && setSelected(idx)}
                 disabled={submitted}
               >
@@ -278,10 +319,10 @@ function QuestionScreen({
                   </span>
                   <span className="leading-snug">{option}</span>
                   {submitted && idx === question.correctOptionIndex && (
-                    <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-400 shrink-0" />
+                    <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
                   )}
                   {submitted && idx === selected && !isCorrect && (
-                    <XCircle className="ml-auto h-4 w-4 text-red-400 shrink-0" />
+                    <XCircle className="ml-auto h-4 w-4 text-red-400 shrink-0 mt-0.5" />
                   )}
                 </div>
               </button>
@@ -289,29 +330,75 @@ function QuestionScreen({
           })}
         </div>
 
-        {/* Explanation (post-submit) */}
+        {/* Post-submission: score + explanation */}
         {submitted && (
-          <div className={`rounded-xl p-4 border space-y-1.5 ${
-            isCorrect
-              ? "bg-emerald-500/[0.06] border-emerald-500/30"
-              : "bg-amber-500/[0.06] border-amber-500/30"
-          }`}>
-            <div className="flex items-center gap-2 text-xs font-semibold">
-              <Lightbulb className={`h-3.5 w-3.5 ${isCorrect ? "text-emerald-400" : "text-amber-400"}`} />
-              <span className={isCorrect ? "text-emerald-400" : "text-amber-400"}>
-                {isCorrect ? "Correct!" : "Incorrect — here's why:"}
-              </span>
+          <div className="space-y-3">
+            {/* Score row */}
+            {scored && (
+              <div
+                className={`flex items-center justify-between rounded-lg px-4 py-2.5 border text-xs font-semibold ${
+                  isCorrect
+                    ? "bg-emerald-500/[0.06] border-emerald-500/30 text-emerald-400"
+                    : "bg-red-500/[0.06] border-red-500/30 text-red-400"
+                }`}
+              >
+                {isCorrect ? (
+                  <>
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Correct!
+                    </span>
+                    <span className="flex items-center gap-2 text-foreground">
+                      <span className="text-muted-foreground">{scored.base} base</span>
+                      {scored.bonus > 0 && (
+                        <span className="text-indigo-400 flex items-center gap-1">
+                          <Zap className="h-3 w-3" />
+                          +{scored.bonus} speed
+                        </span>
+                      )}
+                      <span className="font-bold">=&nbsp;{scored.total} pts</span>
+                    </span>
+                  </>
+                ) : selected === -1 || selected === null ? (
+                  <span>Time expired — no points awarded</span>
+                ) : (
+                  <>
+                    <span className="flex items-center gap-1.5">
+                      <XCircle className="h-3.5 w-3.5" />
+                      Incorrect — 0 points
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Explanation */}
+            <div
+              className={`rounded-xl p-4 border space-y-1.5 ${
+                isCorrect
+                  ? "bg-emerald-500/[0.04] border-emerald-500/20"
+                  : "bg-amber-500/[0.04] border-amber-500/20"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-xs font-semibold">
+                <Lightbulb
+                  className={`h-3.5 w-3.5 ${isCorrect ? "text-emerald-400" : "text-amber-400"}`}
+                />
+                <span className={isCorrect ? "text-emerald-400" : "text-amber-400"}>
+                  {isCorrect ? "Correct!" : "Incorrect — here's why:"}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {question.explanation}
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {question.explanation}
-            </p>
           </div>
         )}
 
-        {/* Action buttons */}
+        {/* Actions */}
         <div className="flex items-center justify-between pt-2 border-t border-border/40">
           <span className="text-xs text-muted-foreground">
-            {selected === null && !submitted ? "Select an answer to continue" : ""}
+            {!submitted && selected === null ? "Select an answer to continue" : ""}
           </span>
           {!submitted ? (
             <Button
@@ -349,16 +436,23 @@ function QuestionScreen({
 
 function CompleteScreen({
   results,
-  questions,
+  totalCount,
+  abilityStart,
+  abilityFinal,
   onRestart,
 }: {
   results: SessionResult[];
-  questions: AssessmentQuestion[];
+  totalCount: number;
+  abilityStart: number;
+  abilityFinal: number;
   onRestart: () => void;
 }) {
   const correct = results.filter((r) => r.correct).length;
-  const total = results.length;
-  const pct = Math.round((correct / total) * 100);
+  const totalScore = results.reduce((s, r) => s + r.score, 0);
+  const totalBonus = results.reduce((s, r) => s + r.bonus, 0);
+  const maxPossible = totalCount * (BASE_CORRECT_SCORE + SPEED_BONUS_MAX);
+  const pct = Math.round((correct / totalCount) * 100);
+  const abilityDelta = abilityFinal - abilityStart;
 
   const grade =
     pct >= 85
@@ -369,9 +463,17 @@ function CompleteScreen({
       ? { label: "Fair", color: "text-amber-400" }
       : { label: "Needs Work", color: "text-red-400" };
 
+  // Grid columns for question dots: max 5 per row
+  const gridCols =
+    totalCount <= 5
+      ? "grid-cols-5"
+      : totalCount <= 10
+      ? "grid-cols-5"
+      : "grid-cols-5";
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6 py-4 text-center">
-      <div className="space-y-2">
+    <div className="max-w-2xl mx-auto space-y-5 py-4">
+      <div className="text-center space-y-2">
         <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 mx-auto">
           <Trophy className="h-8 w-8" />
         </div>
@@ -379,49 +481,158 @@ function CompleteScreen({
           Assessment Complete
         </h1>
         <p className="text-sm text-muted-foreground">
-          You answered <strong className="text-foreground">{correct}</strong> of{" "}
-          <strong className="text-foreground">{total}</strong> questions correctly.
+          You answered{" "}
+          <strong className="text-foreground">{correct}</strong> of{" "}
+          <strong className="text-foreground">{totalCount}</strong> questions correctly.
         </p>
       </div>
 
-      <Card className="p-8 border border-border/80 bg-card shadow-md">
-        {/* Score */}
-        <div className="mb-6">
-          <span className={`text-6xl font-black ${grade.color}`}>{pct}%</span>
-          <p className={`text-lg font-bold mt-1 ${grade.color}`}>{grade.label}</p>
+      <Card className="p-6 border border-border/80 bg-card shadow-md space-y-5">
+        {/* Score headline */}
+        <div className="text-center pb-4 border-b border-border/50">
+          <span className={`text-5xl font-black ${grade.color}`}>{pct}%</span>
+          <p className={`text-base font-bold mt-1 ${grade.color}`}>{grade.label}</p>
         </div>
 
-        {/* Per-question summary */}
-        <div className="grid grid-cols-5 gap-2 mb-6">
-          {results.map((r, idx) => (
-            <div
-              key={idx}
-              className={`flex flex-col items-center justify-center p-2 rounded-lg border text-xs font-bold ${
-                r.correct
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : r.selectedIndex === -1
-                  ? "bg-muted/30 border-border/40 text-muted-foreground"
-                  : "bg-red-500/10 border-red-500/30 text-red-400"
-              }`}
-            >
-              <span>Q{idx + 1}</span>
-              {r.correct ? (
-                <CheckCircle2 className="h-3.5 w-3.5 mt-0.5" />
-              ) : (
-                <XCircle className="h-3.5 w-3.5 mt-0.5" />
-              )}
-            </div>
-          ))}
+        {/* Stats row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
+          <div className="rounded-lg bg-muted/30 p-2.5 space-y-0.5">
+            <p className="text-muted-foreground">Correct</p>
+            <p className="text-lg font-extrabold text-emerald-400">{correct}</p>
+          </div>
+          <div className="rounded-lg bg-muted/30 p-2.5 space-y-0.5">
+            <p className="text-muted-foreground">Incorrect</p>
+            <p className="text-lg font-extrabold text-red-400">{totalCount - correct}</p>
+          </div>
+          <div className="rounded-lg bg-muted/30 p-2.5 space-y-0.5">
+            <p className="text-muted-foreground">Total Score</p>
+            <p className="text-lg font-extrabold text-foreground">{totalScore}</p>
+          </div>
+          <div className="rounded-lg bg-muted/30 p-2.5 space-y-0.5">
+            <p className="text-muted-foreground">Speed Bonus</p>
+            <p className="text-lg font-extrabold text-indigo-400">+{totalBonus}</p>
+          </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
+        {/* Ability change */}
+        <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
+          <div className="text-xs">
+            <p className="text-muted-foreground mb-0.5">Estimated Ability</p>
+            <p className="text-sm font-bold text-foreground">
+              {abilityStart}{" "}
+              <span className="text-muted-foreground mx-1">→</span>{" "}
+              {abilityFinal}
+            </p>
+          </div>
+          <div
+            className={`flex items-center gap-1 text-sm font-bold ${
+              abilityDelta > 0
+                ? "text-emerald-400"
+                : abilityDelta < 0
+                ? "text-red-400"
+                : "text-muted-foreground"
+            }`}
+          >
+            {abilityDelta > 0 ? (
+              <TrendingUp className="h-4 w-4" />
+            ) : abilityDelta < 0 ? (
+              <TrendingDown className="h-4 w-4" />
+            ) : null}
+            {abilityDelta > 0 ? `+${abilityDelta}` : abilityDelta === 0 ? "No change" : abilityDelta}
+          </div>
+        </div>
+
+        {/* Per-question dots */}
+        <div>
+          <p className="text-xs text-muted-foreground mb-2 font-medium">Question Breakdown</p>
+          <div className={`grid ${gridCols} gap-2`}>
+            {results.map((r, idx) => (
+              <div
+                key={idx}
+                className={`flex flex-col items-center justify-center py-2 rounded-lg border text-xs font-bold ${
+                  r.correct
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                    : r.selectedIndex === -1
+                    ? "bg-muted/30 border-border/40 text-muted-foreground"
+                    : "bg-red-500/10 border-red-500/30 text-red-400"
+                }`}
+                title={
+                  r.correct
+                    ? `Q${idx + 1}: Correct (+${r.score}pts)`
+                    : r.selectedIndex === -1
+                    ? `Q${idx + 1}: Timed out`
+                    : `Q${idx + 1}: Incorrect`
+                }
+              >
+                <span>Q{idx + 1}</span>
+                {r.correct ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 mt-0.5" />
+                ) : (
+                  <XCircle className="h-3.5 w-3.5 mt-0.5" />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Answer review */}
+        <div className="border-t border-border/50 pt-4 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Answer Review
+          </p>
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {results.map((r, idx) => (
+              <div
+                key={idx}
+                className="rounded-lg border border-border/50 bg-muted/10 p-3 text-xs space-y-1"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold text-foreground leading-snug">
+                    Q{idx + 1}. {r.question.questionText}
+                  </span>
+                  {r.correct ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0 mt-0.5" />
+                  )}
+                </div>
+                {r.selectedIndex === -1 ? (
+                  <p className="text-muted-foreground italic">Timed out — no answer selected.</p>
+                ) : (
+                  <p className="text-muted-foreground">
+                    Your answer:{" "}
+                    <span
+                      className={r.correct ? "text-emerald-400 font-medium" : "text-red-400 font-medium"}
+                    >
+                      {r.question.options[r.selectedIndex]}
+                    </span>
+                    {!r.correct && (
+                      <>
+                        {" "}· Correct:{" "}
+                        <span className="text-emerald-400 font-medium">
+                          {r.question.options[r.question.correctOptionIndex]}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                )}
+                <p className="text-muted-foreground/70 leading-relaxed">
+                  {r.question.explanation}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-border/50">
           <Button
             variant="outline"
             onClick={onRestart}
             className="flex-1 gap-2 border-border/70"
           >
             <RotateCcw className="h-4 w-4" />
-            Try Again
+            New Assessment
           </Button>
           <Button asChild className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white gap-2">
             <Link href="/results">
@@ -439,71 +650,106 @@ function CompleteScreen({
 
 export default function AssessmentPage() {
   const [phase, setPhase] = useState<Phase>("setup");
-  const [questions, setQuestions] = useState<AssessmentQuestion[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentQuestion, setCurrentQuestion] = useState<AssessmentQuestion | null>(null);
+  const [questionIndex, setQuestionIndex] = useState(0);
+  const [totalCount, setTotalCount] = useState(5);
+  const [selectedTopic, setSelectedTopic] = useState("Mixed");
   const [results, setResults] = useState<SessionResult[]>([]);
+  const [ability, setAbility] = useState(INITIAL_ABILITY);
+  const [abilityStart, setAbilityStart] = useState(INITIAL_ABILITY);
+  const usedIdsRef = useRef<Set<string>>(new Set());
 
   const handleStart = (topic: string, count: number) => {
-    // Filter questions by topic (if not mixed) then slice to count
-    const pool =
-      topic === "Mixed"
-        ? [...MOCK_ASSESSMENT_QUESTIONS]
-        : MOCK_ASSESSMENT_QUESTIONS.filter((q) =>
-            q.topic.toLowerCase().includes(topic.toLowerCase())
-          );
+    usedIdsRef.current = new Set();
+    const first = selectNextQuestion(INITIAL_ABILITY, usedIdsRef.current, topic);
+    if (!first) return; // should not happen with 20 questions
 
-    // If filtered pool is smaller than count, pad with others
-    const filtered =
-      pool.length >= count ? pool.slice(0, count) : MOCK_ASSESSMENT_QUESTIONS.slice(0, count);
-
-    setQuestions(filtered);
-    setCurrentIndex(0);
+    setSelectedTopic(topic);
+    setTotalCount(count);
+    setAbility(INITIAL_ABILITY);
+    setAbilityStart(INITIAL_ABILITY);
     setResults([]);
+    setQuestionIndex(0);
+    setCurrentQuestion(first);
+    usedIdsRef.current.add(first.id);
     setPhase("question");
   };
 
   const handleAnswer = useCallback(
-    (selectedIndex: number) => {
-      const q = questions[currentIndex];
-      const correct = selectedIndex === q.correctOptionIndex;
-      const newResults = [
-        ...results,
-        { questionId: q.id, selectedIndex, correct },
-      ];
-      setResults(newResults);
+    (selectedIndex: number, timeRemaining: number) => {
+      if (!currentQuestion) return;
 
-      if (currentIndex + 1 < questions.length) {
-        setCurrentIndex((i) => i + 1);
+      const correct = selectedIndex !== -1 && selectedIndex === currentQuestion.correctOptionIndex;
+      const { base, bonus, total } = questionScore(correct, timeRemaining, TIMER_SECONDS);
+      const abilityBefore = ability;
+      const abilityAfter = updateAbility(ability, correct, currentQuestion.difficultyLevel);
+
+      const result: SessionResult = {
+        questionId: currentQuestion.id,
+        question: currentQuestion,
+        selectedIndex,
+        correct,
+        abilityBefore,
+        abilityAfter,
+        timeRemaining,
+        base,
+        bonus,
+        score: total,
+      };
+
+      const newResults = [...results, result];
+      setResults(newResults);
+      setAbility(abilityAfter);
+
+      const nextIndex = questionIndex + 1;
+
+      if (nextIndex < totalCount) {
+        // Select next question adaptively
+        const next = selectNextQuestion(abilityAfter, usedIdsRef.current, selectedTopic);
+        if (next) {
+          usedIdsRef.current.add(next.id);
+          setCurrentQuestion(next);
+          setQuestionIndex(nextIndex);
+        } else {
+          // Pool exhausted early — end assessment
+          setPhase("complete");
+        }
       } else {
         setPhase("complete");
       }
     },
-    [questions, currentIndex, results]
+    [currentQuestion, ability, results, questionIndex, totalCount, selectedTopic]
   );
 
   const handleRestart = () => {
+    usedIdsRef.current = new Set();
     setPhase("setup");
-    setQuestions([]);
-    setCurrentIndex(0);
+    setCurrentQuestion(null);
+    setQuestionIndex(0);
     setResults([]);
+    setAbility(INITIAL_ABILITY);
+    setAbilityStart(INITIAL_ABILITY);
   };
 
   return (
     <DashboardLayout>
       {phase === "setup" && <SetupScreen onStart={handleStart} />}
-      {phase === "question" && questions.length > 0 && (
+      {phase === "question" && currentQuestion && (
         <QuestionScreen
-          key={questions[currentIndex].id}
-          question={questions[currentIndex]}
-          questionIndex={currentIndex}
-          totalQuestions={questions.length}
+          key={currentQuestion.id}
+          question={currentQuestion}
+          questionIndex={questionIndex}
+          totalQuestions={totalCount}
+          currentAbility={ability}
           onAnswer={handleAnswer}
         />
       )}
       {phase === "complete" && (
         <CompleteScreen
           results={results}
-          questions={questions}
+          totalCount={totalCount}
+          abilityStart={abilityStart}
+          abilityFinal={ability}
           onRestart={handleRestart}
         />
       )}

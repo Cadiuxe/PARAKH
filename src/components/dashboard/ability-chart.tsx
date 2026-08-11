@@ -1,10 +1,9 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import { MOCK_ABILITY_TRAJECTORY } from "@/lib/mock-data";
-import { TrendingUp, Sparkles, Filter } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 
 export function AbilityChart() {
   return (
@@ -12,13 +11,8 @@ export function AbilityChart() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Analytics Visualization</span>
-            <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 bg-indigo-500/10 text-[10px] py-0">
-              Recharts Engine
-            </Badge>
-          </div>
-          <h3 className="text-lg font-bold text-foreground mt-0.5">Ability Score Trajectory (θ)</h3>
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ability Trajectory</span>
+          <h3 className="text-lg font-bold text-foreground mt-0.5">Ability Score Over Time</h3>
         </div>
 
         <div className="flex items-center gap-2 text-xs">
@@ -64,13 +58,8 @@ export function AbilityChart() {
         </ResponsiveContainer>
       </div>
 
-      {/* Footer Info */}
-      <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-          <span>Notice how ability score rises after correct responses and drops slightly on missed Level 4+ items.</span>
-        </div>
-        <span className="font-mono text-[11px] hidden sm:inline">Session ID: sess-001</span>
+      <div className="mt-4 pt-3 border-t border-border/60 text-xs text-muted-foreground">
+        <span>Ability rises after correct responses and recalibrates after incorrect ones. Shown for the most recent demo session.</span>
       </div>
     </Card>
   );

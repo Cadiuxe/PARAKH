@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { BrainCircuit, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
+import { BrainCircuit, ArrowRight } from "lucide-react";
 import { motion } from "motion/react";
 
 export function Header() {
@@ -16,12 +15,7 @@ export function Header() {
             <BrainCircuit className="h-5 w-5" />
           </div>
           <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-lg tracking-tight text-foreground">PARAKH</span>
-              <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 bg-indigo-500/10 text-[10px] px-1.5 py-0">
-                PROTOTYPE
-              </Badge>
-            </div>
+            <span className="font-bold text-lg tracking-tight text-foreground">PARAKH</span>
             <span className="text-[10px] text-muted-foreground -mt-1 tracking-wider uppercase">Adaptive CAT Engine</span>
           </div>
         </Link>
