@@ -33,6 +33,10 @@ import {
   SPEED_BONUS_MAX,
 } from "@/lib/adaptive-engine";
 import { AssessmentQuestion } from "@/lib/mock-data";
+import {
+  saveCompletedAssessment,
+  CompletedAssessment,
+} from "@/lib/assessment-storage";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -439,12 +443,14 @@ function CompleteScreen({
   totalCount,
   abilityStart,
   abilityFinal,
+  assessmentId,
   onRestart,
 }: {
   results: SessionResult[];
   totalCount: number;
   abilityStart: number;
   abilityFinal: number;
+  assessmentId?: string;
   onRestart: () => void;
 }) {
   const correct = results.filter((r) => r.correct).length;
@@ -635,7 +641,7 @@ function CompleteScreen({
             New Assessment
           </Button>
           <Button asChild className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white gap-2">
-            <Link href="/results">
+            <Link href={assessmentId ? `/results?id=${assessmentId}` : "/results"}>
               View Analytics
               <ArrowRight className="h-4 w-4" />
             </Link>
@@ -657,6 +663,7 @@ export default function AssessmentPage() {
   const [results, setResults] = useState<SessionResult[]>([]);
   const [ability, setAbility] = useState(INITIAL_ABILITY);
   const [abilityStart, setAbilityStart] = useState(INITIAL_ABILITY);
+  const [currentAssessmentId, setCurrentAssessmentId] = useState<string>("");
   const usedIdsRef = useRef<Set<string>>(new Set());
 
   const handleStart = (topic: string, count: number) => {
@@ -671,9 +678,44 @@ export default function AssessmentPage() {
     setResults([]);
     setQuestionIndex(0);
     setCurrentQuestion(first);
+    setCurrentAssessmentId("");
     usedIdsRef.current.add(first.id);
     setPhase("question");
   };
+
+  const finishAssessment = useCallback(
+    (finalResults: SessionResult[], finalAbility: number) => {
+      const asmtId = `asmt_${Date.now()}`;
+      setCurrentAssessmentId(asmtId);
+
+      const correctCount = finalResults.filter((r) => r.correct).length;
+      const completed: CompletedAssessment = {
+        id: asmtId,
+        completedAt: new Date().toISOString(),
+        formattedDate: new Date().toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+        topic: selectedTopic,
+        questionCount: totalCount,
+        correctCount,
+        percentageScore: Math.round((correctCount / totalCount) * 100),
+        totalScore: finalResults.reduce((s, r) => s + r.score, 0),
+        totalBonus: finalResults.reduce((s, r) => s + r.bonus, 0),
+        abilityStart,
+        abilityFinal: finalAbility,
+        abilityDelta: finalAbility - abilityStart,
+        results: finalResults,
+      };
+
+      saveCompletedAssessment(completed);
+      setPhase("complete");
+    },
+    [selectedTopic, totalCount, abilityStart]
+  );
 
   const handleAnswer = useCallback(
     (selectedIndex: number, timeRemaining: number) => {
@@ -712,13 +754,13 @@ export default function AssessmentPage() {
           setQuestionIndex(nextIndex);
         } else {
           // Pool exhausted early — end assessment
-          setPhase("complete");
+          finishAssessment(newResults, abilityAfter);
         }
       } else {
-        setPhase("complete");
+        finishAssessment(newResults, abilityAfter);
       }
     },
-    [currentQuestion, ability, results, questionIndex, totalCount, selectedTopic]
+    [currentQuestion, ability, results, questionIndex, totalCount, selectedTopic, finishAssessment]
   );
 
   const handleRestart = () => {
@@ -729,6 +771,7 @@ export default function AssessmentPage() {
     setResults([]);
     setAbility(INITIAL_ABILITY);
     setAbilityStart(INITIAL_ABILITY);
+    setCurrentAssessmentId("");
   };
 
   return (
@@ -750,6 +793,7 @@ export default function AssessmentPage() {
           totalCount={totalCount}
           abilityStart={abilityStart}
           abilityFinal={ability}
+          assessmentId={currentAssessmentId}
           onRestart={handleRestart}
         />
       )}

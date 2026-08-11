@@ -1,12 +1,23 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { MOCK_TOPICS, TopicPerformance } from "@/lib/mock-data";
+import {
+  getStoredAssessments,
+  calculateTopicAnalytics,
+  TopicAnalytics,
+} from "@/lib/assessment-storage";
 
 export function TopicCards() {
+  const [topics, setTopics] = useState<TopicAnalytics[]>([]);
+
+  useEffect(() => {
+    const asmts = getStoredAssessments();
+    setTopics(calculateTopicAnalytics(asmts));
+  }, []);
+
   return (
     <Card className="p-6 border border-border/80 bg-card shadow-md">
       <div className="mb-5">
@@ -19,9 +30,10 @@ export function TopicCards() {
       </div>
 
       <div className="space-y-4">
-        {MOCK_TOPICS.map((topic: TopicPerformance) => {
-          const isWeak = topic.proficiency < 65;
-          const isStrong = topic.proficiency >= 80;
+        {topics.map((topic) => {
+          const isStrong = topic.status === "Strong";
+          const isWeak = topic.status === "Needs Work";
+          const isAssessed = topic.assessed;
 
           return (
             <div key={topic.id} className="space-y-1.5">
@@ -36,35 +48,36 @@ export function TopicCards() {
                   <span className="font-medium text-foreground">{topic.name}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-0.5 text-muted-foreground">
-                    {topic.trend === "up" && (
-                      <TrendingUp className="h-3 w-3 text-emerald-400" />
-                    )}
-                    {topic.trend === "down" && (
-                      <TrendingDown className="h-3 w-3 text-amber-400" />
-                    )}
-                    {topic.trend === "neutral" && (
-                      <Minus className="h-3 w-3 text-muted-foreground" />
-                    )}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] px-1.5 py-0 font-medium ${
-                      isStrong
-                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                        : isWeak
-                        ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                        : "bg-indigo-500/10 text-indigo-400 border-indigo-500/30"
-                    }`}
-                  >
-                    {topic.proficiency}%
-                  </Badge>
+                  {isAssessed ? (
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] px-1.5 py-0 font-medium ${
+                        isStrong
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                          : isWeak
+                          ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                          : "bg-indigo-500/10 text-indigo-400 border-indigo-500/30"
+                      }`}
+                    >
+                      {topic.proficiency}%
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-[10px]">Not Assessed</span>
+                  )}
                 </div>
               </div>
               <Progress
-                value={topic.proficiency}
+                value={isAssessed ? topic.proficiency : 0}
                 className="h-1.5 bg-muted"
               />
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                <span>
+                  {isAssessed
+                    ? `${topic.totalQuestions} items answered (${topic.accuracy}% accuracy)`
+                    : "No test taken yet"}
+                </span>
+                <span>{topic.status}</span>
+              </div>
             </div>
           );
         })}
