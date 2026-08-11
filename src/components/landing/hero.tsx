@@ -59,7 +59,7 @@ export function Hero() {
             className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto"
           >
             <Button size="lg" asChild className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-6 text-base shadow-xl shadow-indigo-600/25 rounded-xl font-semibold">
-              <Link href="/dashboard" className="flex items-center justify-center gap-2">
+              <Link href="/assessment" className="flex items-center justify-center gap-2">
                 <span>Start Assessment</span>
                 <ArrowRight className="h-5 w-5" />
               </Link>
