@@ -14,6 +14,13 @@ export function CTASection() {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none" />
 
           <div className="relative z-10 max-w-3xl mx-auto flex flex-col items-center">
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.55 }}
+              className="flex flex-col items-center"
+            >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 mb-6">
               <BrainCircuit className="h-6 w-6" />
             </div>
@@ -40,6 +47,7 @@ export function CTASection() {
                 </Link>
               </Button>
             </div>
+            </motion.div>
           </div>
         </div>
       </div>

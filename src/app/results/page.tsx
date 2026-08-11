@@ -5,6 +5,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import {
   LineChart,
   Line,
@@ -13,16 +14,14 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
 import {
   CheckCircle2,
   FileText,
   TrendingUp,
   Target,
-  Zap,
-  BarChart3,
   Play,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -41,7 +40,7 @@ function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-border/80 bg-card px-3 py-2 shadow-xl text-xs space-y-1">
-      <p className="font-semibold text-foreground">{label}</p>
+      <p className="font-semibold text-foreground">Q{label}</p>
       {payload.map((p: any) => (
         <p key={p.dataKey} style={{ color: p.color }}>
           {p.name}: <strong>{p.value}</strong>
@@ -68,10 +67,6 @@ export default function ResultsPage() {
     MOCK_RECENT_ASSESSMENTS.reduce((s, a) => s + a.score, 0) /
       MOCK_RECENT_ASSESSMENTS.length
   );
-  const avgAbility = Math.round(
-    MOCK_RECENT_ASSESSMENTS.reduce((s, a) => s + a.abilityScore, 0) /
-      MOCK_RECENT_ASSESSMENTS.length
-  );
 
   return (
     <DashboardLayout>
@@ -79,19 +74,11 @@ export default function ResultsPage() {
         {/* Page header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Badge
-                variant="outline"
-                className="border-indigo-500/30 bg-indigo-500/10 text-indigo-400 text-xs"
-              >
-                Analytics & Results
-              </Badge>
-            </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-              Performance Overview
+              Analytics &amp; Results
             </h1>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              Your ability trajectory, topic breakdown, and full assessment history.
+              Ability trajectory, topic breakdown, and session history.
             </p>
           </div>
           <Button
@@ -105,18 +92,18 @@ export default function ResultsPage() {
           </Button>
         </div>
 
-        {/* Summary stats row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Summary stats — 3 compact cards */}
+        <div className="grid grid-cols-3 gap-4">
           {[
             {
-              label: "Assessments",
+              label: "Sessions",
               value: MOCK_STUDENT.assessmentsCompleted,
               icon: FileText,
               color: "text-indigo-400",
               bg: "bg-indigo-500/10",
             },
             {
-              label: "Questions Answered",
+              label: "Questions",
               value: totalQuestions,
               icon: Target,
               color: "text-emerald-400",
@@ -129,13 +116,6 @@ export default function ResultsPage() {
               color: "text-amber-400",
               bg: "bg-amber-500/10",
             },
-            {
-              label: "Avg Ability",
-              value: avgAbility,
-              icon: Zap,
-              color: "text-cyan-400",
-              bg: "bg-cyan-500/10",
-            },
           ].map((stat) => {
             const Icon = stat.icon;
             return (
@@ -146,7 +126,7 @@ export default function ResultsPage() {
                 <div
                   className={`flex h-9 w-9 items-center justify-center rounded-lg ${stat.bg} shrink-0`}
                 >
-                  <Icon className={`h-4.5 w-4.5 ${stat.color}`} />
+                  <Icon className={`h-4 w-4 ${stat.color}`} />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">{stat.label}</p>
@@ -157,136 +137,127 @@ export default function ResultsPage() {
           })}
         </div>
 
-        {/* Ability Trajectory Chart */}
-        <Card className="p-6 border border-border/80 bg-card shadow-md">
-          <div className="mb-5">
-            <div className="flex items-center gap-2 mb-0.5">
+        {/* Ability Trajectory Chart + Topic Proficiency side by side */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Chart */}
+          <Card className="lg:col-span-8 p-6 border border-border/80 bg-card shadow-md">
+            <div className="flex items-center gap-2 mb-1">
               <BarChart3 className="h-4 w-4 text-indigo-400" />
               <h3 className="text-base font-bold text-foreground">
                 Ability Trajectory
               </h3>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mb-5">
               Estimated ability vs. question difficulty across your last adaptive session.
             </p>
-          </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart
-              data={MOCK_ABILITY_TRAJECTORY}
-              margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="rgba(255,255,255,0.06)"
-              />
-              <XAxis
-                dataKey="questionNumber"
-                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                domain={[40, 100]}
-                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip content={<ChartTooltip />} />
-              <Legend
-                wrapperStyle={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}
-              />
-              <Line
-                type="monotone"
-                dataKey="ability"
-                name="Ability Score"
-                stroke="#6366f1"
-                strokeWidth={2.5}
-                dot={{ fill: "#6366f1", r: 4, strokeWidth: 0 }}
-                activeDot={{ r: 6 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="difficulty"
-                name="Question Difficulty"
-                stroke="#f59e0b"
-                strokeWidth={1.5}
-                strokeDasharray="5 3"
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </Card>
-
-        {/* Topic proficiency grid */}
-        <div>
-          <h3 className="text-base font-bold text-foreground mb-3">
-            Topic Proficiency
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {MOCK_TOPICS.map((topic) => (
-              <Card
-                key={topic.id}
-                className="p-4 border border-border/80 bg-card shadow-sm space-y-3"
+            <div className="flex items-center gap-4 mb-3 text-[11px] text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-indigo-500 inline-block" />
+                Ability Score
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-0.5 w-5 border-t-2 border-dashed border-amber-500 inline-block" />
+                Question Difficulty
+              </span>
+            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart
+                data={MOCK_ABILITY_TRAJECTORY}
+                margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
               >
-                <div className="flex items-center justify-between">
-                  <div
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white"
-                    style={{ backgroundColor: topic.color + "30", color: topic.color }}
-                  >
-                    {topic.code}
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="rgba(255,255,255,0.06)"
+                />
+                <XAxis
+                  dataKey="questionNumber"
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  domain={[40, 100]}
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip content={<ChartTooltip />} />
+                <Line
+                  type="monotone"
+                  dataKey="ability"
+                  name="Ability Score"
+                  stroke="#6366f1"
+                  strokeWidth={2.5}
+                  dot={{ fill: "#6366f1", r: 4, strokeWidth: 0 }}
+                  activeDot={{ r: 6 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="difficulty"
+                  name="Difficulty"
+                  stroke="#f59e0b"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 3"
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </Card>
+
+          {/* Topic Proficiency — compact list */}
+          <Card className="lg:col-span-4 p-6 border border-border/80 bg-card shadow-md">
+            <h3 className="text-base font-bold text-foreground mb-4">
+              Topic Proficiency
+            </h3>
+            <div className="space-y-4">
+              {MOCK_TOPICS.map((topic) => {
+                const isStrong = topic.proficiency >= 80;
+                const isWeak = topic.proficiency < 65;
+                return (
+                  <div key={topic.id} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold text-white shrink-0"
+                          style={{ backgroundColor: topic.color }}
+                        >
+                          {topic.code[0]}
+                        </span>
+                        <span className="font-medium text-foreground">{topic.name}</span>
+                      </div>
+                      <span
+                        className={`font-bold ${
+                          isStrong
+                            ? "text-emerald-400"
+                            : isWeak
+                            ? "text-amber-400"
+                            : "text-indigo-400"
+                        }`}
+                      >
+                        {topic.proficiency}%
+                      </span>
+                    </div>
+                    <Progress value={topic.proficiency} className="h-1.5 bg-muted" />
+                    <p className="text-[10px] text-muted-foreground">
+                      {isStrong ? "Strong" : isWeak ? "Needs Work" : "Developing"} · {topic.accuracy}% accuracy
+                    </p>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] ${
-                      topic.trend === "up"
-                        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                        : topic.trend === "down"
-                        ? "border-red-500/30 bg-red-500/10 text-red-400"
-                        : "border-border/60 text-muted-foreground"
-                    }`}
-                  >
-                    {topic.trend === "up"
-                      ? "↑ Improving"
-                      : topic.trend === "down"
-                      ? "↓ Declining"
-                      : "→ Stable"}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-foreground leading-tight">
-                    {topic.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {topic.totalQuestions} questions · {topic.accuracy}% accuracy
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Proficiency</span>
-                    <span className="font-bold text-foreground">
-                      {topic.proficiency}%
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${topic.proficiency}%`,
-                        backgroundColor: topic.color,
-                      }}
-                    />
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          </Card>
         </div>
 
         {/* Session history */}
         <Card className="p-6 border border-border/80 bg-card shadow-md">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-            <h3 className="text-base font-bold text-foreground">Session History</h3>
-            {/* Topic filter tabs */}
+            <div>
+              <h3 className="text-base font-bold text-foreground">Session History</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Demo data — real sessions will appear here after connecting to the database.
+              </p>
+            </div>
+            {/* Topic filter */}
             <div className="flex flex-wrap gap-1.5">
               {TOPIC_FILTERS.map((f) => (
                 <button
@@ -304,7 +275,7 @@ export default function ResultsPage() {
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             {filteredAssessments.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-6">
                 No sessions match this filter.
@@ -313,41 +284,19 @@ export default function ResultsPage() {
               filteredAssessments.map((item) => (
                 <div
                   key={item.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 rounded-lg border border-border/60 bg-muted/10 hover:bg-muted/30 transition-colors"
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shrink-0">
-                      <FileText className="h-4 w-4" />
-                    </div>
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                     <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-semibold text-foreground">
-                          {item.title}
-                        </h4>
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] px-1.5 py-0 border-border/60 text-muted-foreground"
-                        >
-                          {item.subject}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                        <span>{item.date}</span>
-                        <span>•</span>
-                        <span>{item.questionsCount} Questions</span>
-                      </div>
+                      <p className="text-sm font-medium text-foreground leading-tight">{item.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {item.date} · {item.questionsCount} questions · {item.subject}
+                      </p>
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-border/40">
-                    <div className="text-left sm:text-right">
-                      <span className="text-sm font-extrabold text-foreground">
-                        {item.score}%
-                      </span>
-                      <span className="block text-[10px] text-muted-foreground">
-                        Ability: {item.abilityScore}
-                      </span>
-                    </div>
+                  <div className="flex items-center gap-3 self-end sm:self-auto">
+                    <span className="text-base font-extrabold text-foreground">{item.score}%</span>
                     <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] gap-1 py-0.5">
                       <CheckCircle2 className="h-3 w-3" />
                       Completed

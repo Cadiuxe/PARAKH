@@ -1,17 +1,53 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SidebarContent } from "./sidebar";
-import { Menu, Search, Bell, Sparkles, BrainCircuit } from "lucide-react";
+import { Menu, Search, Bell } from "lucide-react";
 import { MOCK_STUDENT } from "@/lib/mock-data";
 
+// Derive initials from name
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export function DashboardHeader() {
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  // Close when clicking outside
+  useEffect(() => {
+    if (!notifOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [notifOpen]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!notifOpen) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setNotifOpen(false);
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [notifOpen]);
+
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-border/60 bg-background/80 px-4 sm:px-6 backdrop-blur-md">
-      {/* Mobile Drawer Trigger & Title */}
+      {/* Mobile Drawer + Search */}
       <div className="flex items-center gap-3">
         <Sheet>
           <SheetTrigger
@@ -27,8 +63,6 @@ export function DashboardHeader() {
           </SheetContent>
         </Sheet>
 
-
-        {/* Search input placeholder */}
         <div className="relative hidden sm:block w-64 md:w-80">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -39,30 +73,62 @@ export function DashboardHeader() {
         </div>
       </div>
 
-      {/* Right Header Status Actions */}
+      {/* Right: Notifications + Avatar */}
       <div className="flex items-center gap-3">
-        {/* CAT Status Pill */}
-        <div className="hidden lg:flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-300">
-          <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-          <span>CAT Model: <strong>Heuristic Engine v1.0</strong></span>
+        {/* Notification button + popover */}
+        <div className="relative" ref={notifRef}>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 rounded-lg border-border/60 relative"
+            aria-label="Open notifications"
+            aria-expanded={notifOpen}
+            onClick={() => setNotifOpen((v) => !v)}
+          >
+            <Bell className="h-4 w-4 text-muted-foreground" />
+          </Button>
+
+          {/* Popover */}
+          {notifOpen && (
+            <div
+              role="dialog"
+              aria-label="Notifications"
+              className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-border/80 bg-card shadow-2xl shadow-black/30 z-50 overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+                <span className="text-sm font-semibold text-foreground">Notifications</span>
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Demo</span>
+              </div>
+
+              {/* Empty state */}
+              <div className="flex flex-col items-center justify-center gap-2 py-8 px-4 text-center">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted/60 text-muted-foreground">
+                  <Bell className="h-4 w-4" />
+                </div>
+                <p className="text-sm font-medium text-foreground">No new notifications</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Assessment results and system alerts will appear here.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Notifications */}
-        <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg border-border/60 relative">
-          <Bell className="h-4 w-4 text-muted-foreground" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-indigo-500"></span>
-        </Button>
-
-        {/* User Profile Avatar */}
+        {/* User Profile */}
         <div className="flex items-center gap-2 pl-2 border-l border-border/60">
           <Avatar className="h-9 w-9 border border-indigo-500/30">
             <AvatarFallback className="bg-indigo-600 text-white font-bold text-xs">
-              AS
+              {getInitials(MOCK_STUDENT.name)}
             </AvatarFallback>
           </Avatar>
           <div className="hidden md:flex flex-col text-left">
-            <span className="text-xs font-semibold text-foreground leading-none">{MOCK_STUDENT.name}</span>
-            <span className="text-[10px] text-muted-foreground mt-0.5">{MOCK_STUDENT.estimatedAbilityLevel}</span>
+            <span className="text-xs font-semibold text-foreground leading-none">
+              {MOCK_STUDENT.name}
+            </span>
+            <span className="text-[10px] text-muted-foreground mt-0.5">
+              {MOCK_STUDENT.estimatedAbilityLevel}
+            </span>
           </div>
         </div>
       </div>

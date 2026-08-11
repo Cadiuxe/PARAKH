@@ -1,106 +1,304 @@
 "use client";
 
-import { motion } from "motion/react";
+import { useEffect, useState, useReducer } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { CheckCircle2, XCircle, Sparkles, TrendingUp, Cpu, Gauge } from "lucide-react";
-import { MOCK_ABILITY_TRAJECTORY } from "@/lib/mock-data";
+import { CheckCircle2, XCircle, Sparkles, TrendingUp, ArrowRight } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine } from "recharts";
 
+// --- Demo question sequence showing adaptation ---
+const DEMO_STEPS = [
+  {
+    questionNum: 1,
+    difficulty: "Level 2",
+    difficultyLabel: "Easy",
+    difficultyColor: "text-emerald-400",
+    difficultyBg: "bg-emerald-500/10 border-emerald-500/30",
+    question: "Which data structure uses LIFO (Last In, First Out) ordering?",
+    options: [
+      { letter: "A", text: "Queue" },
+      { letter: "B", text: "Stack", correct: true },
+      { letter: "C", text: "Heap" },
+      { letter: "D", text: "Linked List" },
+    ],
+    correctIndex: 1,
+    outcome: "correct" as const,
+    abilityBefore: 50,
+    abilityAfter: 62,
+    nextDifficulty: "Level 3 (Medium)",
+    explanation: "Correct answer selected. Ability rises — difficulty escalates.",
+  },
+  {
+    questionNum: 2,
+    difficulty: "Level 3",
+    difficultyLabel: "Medium",
+    difficultyColor: "text-amber-400",
+    difficultyBg: "bg-amber-500/10 border-amber-500/30",
+    question: "What is the time complexity of binary search on a sorted array of n elements?",
+    options: [
+      { letter: "A", text: "O(n)" },
+      { letter: "B", text: "O(n log n)" },
+      { letter: "C", text: "O(log n)", correct: true },
+      { letter: "D", text: "O(1)" },
+    ],
+    correctIndex: 2,
+    outcome: "correct" as const,
+    abilityBefore: 62,
+    abilityAfter: 74,
+    nextDifficulty: "Level 4 (Hard)",
+    explanation: "Correct again. Ability continues to rise — engine targets harder items.",
+  },
+  {
+    questionNum: 3,
+    difficulty: "Level 4",
+    difficultyLabel: "Hard",
+    difficultyColor: "text-red-400",
+    difficultyBg: "bg-red-500/10 border-red-500/30",
+    question: "In DBMS, which isolation level prevents dirty reads but allows non-repeatable reads?",
+    options: [
+      { letter: "A", text: "Read Uncommitted" },
+      { letter: "B", text: "Read Committed", correct: true },
+      { letter: "C", text: "Repeatable Read" },
+      { letter: "D", text: "Serializable" },
+    ],
+    correctIndex: 1,
+    outcome: "incorrect" as const,
+    selectedIndex: 2,
+    abilityBefore: 74,
+    abilityAfter: 68,
+    nextDifficulty: "Level 3 (Medium)",
+    explanation: "Incorrect. Ability recalibrates — engine steps back to find true level.",
+  },
+];
+
+// Build a growing trajectory for the chart
+const buildTrajectory = (upTo: number, stage: "before" | "answered") => {
+  const points: { q: number; ability: number }[] = [{ q: 0, ability: 50 }];
+  for (let i = 0; i < DEMO_STEPS.length; i++) {
+    const step = DEMO_STEPS[i];
+    if (i < upTo) {
+      points.push({ q: i + 1, ability: step.abilityAfter });
+    } else if (i === upTo && stage === "answered") {
+      points.push({ q: i + 1, ability: step.abilityAfter });
+    }
+  }
+  return points;
+};
+
+type Phase = "question" | "selecting" | "answered" | "transitioning";
+
 export function AdaptivePreview() {
+  const shouldReduceMotion = useReducedMotion();
+
+  const [stepIndex, setStepIndex] = useState(0);
+  const [phase, setPhase] = useState<Phase>("question");
+  const [trajectory, setTrajectory] = useState(buildTrajectory(0, "before"));
+
+  const step = DEMO_STEPS[stepIndex];
+
+  useEffect(() => {
+    if (shouldReduceMotion) return; // static display for reduced motion
+
+    let t1: ReturnType<typeof setTimeout>;
+    let t2: ReturnType<typeof setTimeout>;
+    let t3: ReturnType<typeof setTimeout>;
+    let t4: ReturnType<typeof setTimeout>;
+
+    if (phase === "question") {
+      // Auto-select after 2.2s
+      t1 = setTimeout(() => setPhase("selecting"), 2200);
+    } else if (phase === "selecting") {
+      // Show result after 0.9s
+      t2 = setTimeout(() => {
+        setPhase("answered");
+        setTrajectory(buildTrajectory(stepIndex, "answered"));
+      }, 900);
+    } else if (phase === "answered") {
+      // Move to next question after 3s
+      t3 = setTimeout(() => setPhase("transitioning"), 3000);
+    } else if (phase === "transitioning") {
+      t4 = setTimeout(() => {
+        const next = (stepIndex + 1) % DEMO_STEPS.length;
+        setStepIndex(next);
+        setTrajectory(buildTrajectory(next, "before"));
+        setPhase("question");
+      }, 400);
+    }
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+    };
+  }, [phase, stepIndex, shouldReduceMotion]);
+
+  const selectedIndex =
+    phase === "selecting" || phase === "answered"
+      ? step.outcome === "correct"
+        ? step.correctIndex
+        : (step as any).selectedIndex ?? step.correctIndex
+      : null;
+
+  const showResult = phase === "answered";
+  const isCorrect = step.outcome === "correct";
+
   return (
     <Card className="relative overflow-hidden border border-border/80 bg-card/60 backdrop-blur-xl shadow-2xl p-5 sm:p-6 text-foreground">
-      {/* Header Bar */}
+      {/* Header */}
       <div className="flex items-center justify-between border-b border-border/60 pb-4 mb-5">
         <div className="flex items-center gap-3">
-          <div className="flex h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></div>
+          <motion.div
+            className="h-2.5 w-2.5 rounded-full bg-emerald-500"
+            animate={shouldReduceMotion ? {} : { opacity: [1, 0.4, 1] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          />
           <div>
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active CAT Engine Session</span>
-            <h4 className="text-sm font-bold text-foreground">Adaptive Question Selection Matrix</h4>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Adaptive Assessment Preview
+            </span>
+            <h4 className="text-sm font-bold text-foreground">
+              How PARAKH adapts to you
+            </h4>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-indigo-500/10 border-indigo-500/30 text-indigo-400 text-xs gap-1 py-1">
-            <Cpu className="h-3 w-3" />
-            <span>Target Ability: ~78%</span>
-          </Badge>
-        </div>
+        <Badge
+          variant="outline"
+          className="bg-indigo-500/10 border-indigo-500/30 text-indigo-400 text-xs gap-1.5 py-1"
+        >
+          <Sparkles className="h-3 w-3" />
+          Live Demo
+        </Badge>
       </div>
 
-      {/* Main Grid: Active Question Mock + Live Trajectory Chart */}
+      {/* Main grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left Column: Simulated Question Card */}
-        <div className="lg:col-span-7 flex flex-col gap-3">
+        {/* Left: Question + Options */}
+        <div className="lg:col-span-7 flex flex-col gap-3 min-h-[280px]">
+          {/* Question meta */}
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="font-mono">Question 04 / 15</span>
+            <span className="font-mono">Question {step.questionNum} / {DEMO_STEPS.length}</span>
             <div className="flex items-center gap-1.5">
               <span>Difficulty:</span>
-              <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/30 font-mono text-[10px]">
-                Level 4 • Hard
+              <Badge className={`${step.difficultyBg} ${step.difficultyColor} font-mono text-[10px] border`}>
+                {step.difficulty} · {step.difficultyLabel}
               </Badge>
             </div>
           </div>
 
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-4 text-xs sm:text-sm font-medium leading-relaxed">
-            In a DBMS supporting ACID properties, which locking protocol guarantees serializability while preventing cascading rollbacks under strict execution rules?
-          </div>
+          {/* Question text */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`q-${stepIndex}`}
+              initial={shouldReduceMotion ? {} : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={shouldReduceMotion ? {} : { opacity: 0, y: -8 }}
+              transition={{ duration: 0.3 }}
+              className="rounded-lg border border-border/60 bg-muted/30 p-4 text-xs sm:text-sm font-medium leading-relaxed"
+            >
+              {step.question}
+            </motion.div>
+          </AnimatePresence>
 
           {/* Options */}
-          <div className="space-y-2 mt-1">
-            {[
-              { letter: "A", text: "2-Phase Locking (2PL)", correct: false },
-              { letter: "B", text: "Strict 2-Phase Locking (Strict 2PL)", correct: true },
-              { letter: "C", text: "Basic Timestamp Ordering", correct: false },
-              { letter: "D", text: "Optimistic Concurrency Control", correct: false },
-            ].map((opt, i) => (
-              <div
-                key={i}
-                className={`flex items-center justify-between rounded-md border p-2.5 text-xs transition-colors ${
-                  opt.correct
-                    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300 font-medium"
-                    : "border-border/50 bg-background/50 text-muted-foreground hover:border-border"
+          <div className="space-y-2">
+            {step.options.map((opt, i) => {
+              const isSelected = selectedIndex === i;
+              const isActuallyCorrect = opt.correct;
+              let optClass = "border-border/50 bg-background/50 text-muted-foreground";
+              let indicator = null;
+
+              if (showResult && isActuallyCorrect) {
+                optClass = "border-emerald-500/50 bg-emerald-500/10 text-emerald-300 font-medium";
+                indicator = <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />;
+              } else if (showResult && isSelected && !isActuallyCorrect) {
+                optClass = "border-red-500/40 bg-red-500/10 text-red-300";
+                indicator = <XCircle className="h-4 w-4 text-red-400 shrink-0" />;
+              } else if (isSelected && !showResult) {
+                optClass = "border-indigo-500/50 bg-indigo-500/10 text-indigo-300 font-medium";
+              }
+
+              return (
+                <motion.div
+                  key={i}
+                  animate={
+                    shouldReduceMotion ? {} :
+                    isSelected && phase === "selecting"
+                      ? { scale: [1, 1.015, 1] }
+                      : { scale: 1 }
+                  }
+                  transition={{ duration: 0.25 }}
+                  className={`flex items-center justify-between rounded-md border p-2.5 text-xs transition-colors ${optClass}`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold shrink-0 ${
+                        isSelected ? "bg-indigo-500 text-white" :
+                        showResult && isActuallyCorrect ? "bg-emerald-500 text-white" :
+                        "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {opt.letter}
+                    </span>
+                    <span>{opt.text}</span>
+                  </div>
+                  {indicator}
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Feedback bar */}
+          <AnimatePresence>
+            {showResult && (
+              <motion.div
+                initial={shouldReduceMotion ? {} : { opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={shouldReduceMotion ? {} : { opacity: 0, height: 0 }}
+                transition={{ duration: 0.3 }}
+                className={`flex items-center justify-between rounded-lg border px-3 py-2 text-[11px] ${
+                  isCorrect
+                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                    : "bg-amber-500/10 border-amber-500/20 text-amber-300"
                 }`}
               >
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${
-                      opt.correct ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {opt.letter}
-                  </span>
-                  <span>{opt.text}</span>
+                <div className="flex items-center gap-1.5 font-medium">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  <span>{step.explanation}</span>
                 </div>
-                {opt.correct && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
-              </div>
-            ))}
-          </div>
-
-          {/* Heuristic Feedback bar */}
-          <div className="mt-2 flex items-center justify-between rounded-lg bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 text-[11px] text-indigo-300">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-              <span>Correct (+12 Ability Score) • Next Question Difficulty: <strong>Level 5 (Hard)</strong></span>
-            </div>
-            <span className="font-mono text-[10px]">Response Time: 28s</span>
-          </div>
+                <div className="flex items-center gap-1 text-muted-foreground font-mono">
+                  <ArrowRight className="h-3 w-3" />
+                  <span>{step.nextDifficulty}</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Right Column: Live Trajectory Graph */}
+        {/* Right: Live Trajectory Graph */}
         <div className="lg:col-span-5 flex flex-col justify-between rounded-xl border border-border/50 bg-background/40 p-4">
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
                 <TrendingUp className="h-4 w-4 text-indigo-400" />
-                <span className="text-xs font-semibold text-foreground">Ability Trajectory (θ)</span>
+                <span className="text-xs font-semibold text-foreground">Ability Score</span>
               </div>
-              <span className="text-[10px] text-muted-foreground font-mono">Dynamic CAT Model</span>
+              {showResult && (
+                <motion.span
+                  initial={shouldReduceMotion ? {} : { opacity: 0, x: 6 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className={`text-xs font-bold ${isCorrect ? "text-emerald-400" : "text-amber-400"}`}
+                >
+                  {isCorrect ? `+${step.abilityAfter - step.abilityBefore}` : `${step.abilityAfter - step.abilityBefore}`}
+                </motion.span>
+              )}
             </div>
 
             <div className="h-44 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={MOCK_ABILITY_TRAJECTORY} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                  <XAxis dataKey="questionNumber" stroke="#71717a" fontSize={10} tickLine={false} />
+                <LineChart data={trajectory} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <XAxis dataKey="q" stroke="#71717a" fontSize={10} tickLine={false} />
                   <YAxis domain={[40, 100]} stroke="#71717a" fontSize={10} tickLine={false} />
                   <Tooltip
                     contentStyle={{
@@ -109,30 +307,48 @@ export function AdaptivePreview() {
                       borderRadius: "8px",
                       fontSize: "11px",
                     }}
+                    formatter={(v: any) => [`${v} pts`, "Ability"]}
+                    labelFormatter={(l) => `Q${l}`}
                   />
-                  <ReferenceLine y={70} stroke="#6366f1" strokeDasharray="3 3" label={{ value: 'Hard Threshold', fill: '#818cf8', fontSize: 9 }} />
+                  <ReferenceLine
+                    y={70}
+                    stroke="#6366f1"
+                    strokeDasharray="3 3"
+                    label={{ value: "Hard Zone", fill: "#818cf8", fontSize: 9, position: "insideTopRight" }}
+                  />
                   <Line
                     type="monotone"
                     dataKey="ability"
                     stroke="#6366f1"
                     strokeWidth={2.5}
-                    dot={{ fill: "#6366f1", r: 3 }}
-                    activeDot={{ r: 5 }}
+                    dot={{ fill: "#6366f1", r: 4 }}
+                    activeDot={{ r: 6 }}
+                    isAnimationActive={!shouldReduceMotion}
+                    animationDuration={600}
                   />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Mini Stats Summary below graph */}
-          <div className="grid grid-cols-2 gap-2 pt-3 border-t border-border/40 text-[11px]">
+          {/* Ability delta summary */}
+          <div className="grid grid-cols-2 gap-2 pt-3 border-t border-border/40 text-[11px] mt-2">
             <div className="rounded bg-muted/40 p-2 text-center">
-              <span className="text-muted-foreground block text-[10px]">Topic Selection Bias</span>
-              <span className="font-semibold text-indigo-400">DBMS (High Priority)</span>
+              <span className="text-muted-foreground block text-[10px] mb-0.5">Current Ability</span>
+              <motion.span
+                key={`${stepIndex}-${phase}`}
+                initial={shouldReduceMotion ? {} : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="font-bold text-indigo-400"
+              >
+                {showResult ? step.abilityAfter : step.abilityBefore} pts
+              </motion.span>
             </div>
             <div className="rounded bg-muted/40 p-2 text-center">
-              <span className="text-muted-foreground block text-[10px]">Exposure Risk</span>
-              <span className="font-semibold text-emerald-400">Low (Unused Q)</span>
+              <span className="text-muted-foreground block text-[10px] mb-0.5">Next Difficulty</span>
+              <span className={`font-semibold ${showResult ? step.difficultyColor : "text-muted-foreground"}`}>
+                {showResult ? step.nextDifficulty.split(" ")[0] + " " + step.nextDifficulty.split(" ")[1] : "Pending…"}
+              </span>
             </div>
           </div>
         </div>
