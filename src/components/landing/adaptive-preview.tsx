@@ -115,24 +115,24 @@ export function AdaptivePreview() {
     let t4: ReturnType<typeof setTimeout>;
 
     if (phase === "question") {
-      // Auto-select after 2.2s
-      t1 = setTimeout(() => setPhase("selecting"), 2200);
+      // Auto-select after 1.4s (reduced cycle timing for demo)
+      t1 = setTimeout(() => setPhase("selecting"), 1400);
     } else if (phase === "selecting") {
-      // Show result after 0.9s
+      // Show result after 0.5s
       t2 = setTimeout(() => {
         setPhase("answered");
         setTrajectory(buildTrajectory(stepIndex, "answered"));
-      }, 900);
+      }, 500);
     } else if (phase === "answered") {
-      // Move to next question after 3s
-      t3 = setTimeout(() => setPhase("transitioning"), 3000);
+      // Move to next question after 1.6s
+      t3 = setTimeout(() => setPhase("transitioning"), 1600);
     } else if (phase === "transitioning") {
       t4 = setTimeout(() => {
         const next = (stepIndex + 1) % DEMO_STEPS.length;
         setStepIndex(next);
         setTrajectory(buildTrajectory(next, "before"));
         setPhase("question");
-      }, 400);
+      }, 250);
     }
 
     return () => {
@@ -154,9 +154,9 @@ export function AdaptivePreview() {
   const isCorrect = step.outcome === "correct";
 
   return (
-    <Card className="relative overflow-hidden border border-border/80 bg-card/60 backdrop-blur-xl shadow-2xl p-5 sm:p-6 text-foreground">
+    <Card className="relative overflow-hidden border border-zinc-800 bg-zinc-900/60 backdrop-blur-xl shadow-2xl p-5 sm:p-6 text-zinc-100">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4 mb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4 mb-5">
         <div className="flex items-center gap-3">
           <motion.div
             className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0"
@@ -164,23 +164,23 @@ export function AdaptivePreview() {
             transition={{ duration: 2, repeat: Infinity }}
           />
           <div>
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
               Adaptive Assessment Preview
             </span>
-            <h4 className="text-sm font-bold text-foreground">
+            <h4 className="text-sm font-bold text-zinc-100">
               How PARAKH adapts to you
             </h4>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Separate informational control — opens explanation dialog without activating/resetting preview */}
+          {/* Independent Adaptive Logic button triggering dialog without altering live preview */}
           <AdaptiveLogicDialog
             trigger={
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 px-3 text-xs gap-1.5 border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 hover:text-indigo-200 transition-colors shadow-sm cursor-pointer"
+                className="h-8 px-3 text-xs gap-1.5 border-zinc-700/60 bg-zinc-800/60 text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors shadow-sm cursor-pointer"
               >
                 <BrainCircuit className="h-3.5 w-3.5 text-indigo-400" />
                 <span>Adaptive Logic</span>
@@ -190,9 +190,9 @@ export function AdaptivePreview() {
 
           <Badge
             variant="outline"
-            className="bg-indigo-500/10 border-indigo-500/30 text-indigo-400 text-xs gap-1.5 py-1.5 hidden sm:inline-flex"
+            className="bg-zinc-800/60 border-zinc-700/60 text-zinc-300 text-xs gap-1.5 py-1.5 hidden sm:inline-flex"
           >
-            <Sparkles className="h-3 w-3" />
+            <Sparkles className="h-3 w-3 text-indigo-400" />
             Live Demo
           </Badge>
         </div>
@@ -203,7 +203,7 @@ export function AdaptivePreview() {
         {/* Left: Question + Options */}
         <div className="lg:col-span-7 flex flex-col gap-3 min-h-[280px]">
           {/* Question meta */}
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center justify-between text-xs text-zinc-400">
             <span className="font-mono">Question {step.questionNum} / {DEMO_STEPS.length}</span>
             <div className="flex items-center gap-1.5">
               <span>Difficulty:</span>
@@ -217,11 +217,11 @@ export function AdaptivePreview() {
           <AnimatePresence mode="wait">
             <motion.div
               key={`q-${stepIndex}`}
-              initial={shouldReduceMotion ? {} : { opacity: 0, y: 8 }}
+              initial={shouldReduceMotion ? {} : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={shouldReduceMotion ? {} : { opacity: 0, y: -8 }}
-              transition={{ duration: 0.3 }}
-              className="rounded-lg border border-border/60 bg-muted/30 p-4 text-xs sm:text-sm font-medium leading-relaxed"
+              exit={shouldReduceMotion ? {} : { opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+              className="rounded-lg border border-zinc-800/80 bg-zinc-950/50 p-4 text-xs sm:text-sm font-medium leading-relaxed"
             >
               {step.question}
             </motion.div>
@@ -232,7 +232,7 @@ export function AdaptivePreview() {
             {step.options.map((opt, i) => {
               const isSelected = selectedIndex === i;
               const isActuallyCorrect = opt.correct;
-              let optClass = "border-border/50 bg-background/50 text-muted-foreground";
+              let optClass = "border-zinc-800/80 bg-zinc-950/40 text-zinc-400";
               let indicator = null;
 
               if (showResult && isActuallyCorrect) {
@@ -251,18 +251,18 @@ export function AdaptivePreview() {
                   animate={
                     shouldReduceMotion ? {} :
                     isSelected && phase === "selecting"
-                      ? { scale: [1, 1.015, 1] }
+                      ? { scale: [1, 1.012, 1] }
                       : { scale: 1 }
                   }
-                  transition={{ duration: 0.25 }}
-                  className={`flex items-center justify-between rounded-md border p-2.5 text-xs transition-colors ${optClass}`}
+                  transition={{ duration: 0.2 }}
+                  className={`flex items-center justify-between rounded-md border p-2.5 text-xs transition-all duration-200 ${optClass}`}
                 >
                   <div className="flex items-center gap-2.5">
                     <span
                       className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold shrink-0 ${
                         isSelected ? "bg-indigo-500 text-white" :
                         showResult && isActuallyCorrect ? "bg-emerald-500 text-white" :
-                        "bg-muted text-muted-foreground"
+                        "bg-zinc-800 text-zinc-400"
                       }`}
                     >
                       {opt.letter}
@@ -282,7 +282,7 @@ export function AdaptivePreview() {
                 initial={shouldReduceMotion ? {} : { opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={shouldReduceMotion ? {} : { opacity: 0, height: 0 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: 0.2 }}
                 className={`flex items-center justify-between rounded-lg border px-3 py-2 text-[11px] ${
                   isCorrect
                     ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
@@ -293,7 +293,7 @@ export function AdaptivePreview() {
                   <Sparkles className="h-3.5 w-3.5 shrink-0" />
                   <span>{step.explanation}</span>
                 </div>
-                <div className="flex items-center gap-1 text-muted-foreground font-mono">
+                <div className="flex items-center gap-1 text-zinc-400 font-mono">
                   <ArrowRight className="h-3 w-3" />
                   <span>{step.nextDifficulty}</span>
                 </div>
@@ -303,17 +303,18 @@ export function AdaptivePreview() {
         </div>
 
         {/* Right: Live Trajectory Graph */}
-        <div className="lg:col-span-5 flex flex-col justify-between rounded-xl border border-border/50 bg-background/40 p-4">
+        <div className="lg:col-span-5 flex flex-col justify-between rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4">
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
                 <TrendingUp className="h-4 w-4 text-indigo-400" />
-                <span className="text-xs font-semibold text-foreground">Ability Score</span>
+                <span className="text-xs font-semibold text-zinc-100">Ability Score</span>
               </div>
               {showResult && (
                 <motion.span
-                  initial={shouldReduceMotion ? {} : { opacity: 0, x: 6 }}
-                  animate={{ opacity: 1, x: 0 }}
+                  initial={shouldReduceMotion ? {} : { opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.2 }}
                   className={`text-xs font-bold ${isCorrect ? "text-emerald-400" : "text-amber-400"}`}
                 >
                   {isCorrect ? `+${step.abilityAfter - step.abilityBefore}` : `${step.abilityAfter - step.abilityBefore}`}
@@ -350,7 +351,7 @@ export function AdaptivePreview() {
                     dot={{ fill: "#6366f1", r: 4 }}
                     activeDot={{ r: 6 }}
                     isAnimationActive={!shouldReduceMotion}
-                    animationDuration={600}
+                    animationDuration={400}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -358,21 +359,22 @@ export function AdaptivePreview() {
           </div>
 
           {/* Ability delta summary */}
-          <div className="grid grid-cols-2 gap-2 pt-3 border-t border-border/40 text-[11px] mt-2">
-            <div className="rounded bg-muted/40 p-2 text-center">
-              <span className="text-muted-foreground block text-[10px] mb-0.5">Current Ability</span>
+          <div className="grid grid-cols-2 gap-2 pt-3 border-t border-zinc-800/80 text-[11px] mt-2">
+            <div className="rounded bg-zinc-900/60 p-2 text-center border border-zinc-800/60">
+              <span className="text-zinc-400 block text-[10px] mb-0.5">Current Ability</span>
               <motion.span
                 key={`${stepIndex}-${phase}`}
                 initial={shouldReduceMotion ? {} : { opacity: 0 }}
                 animate={{ opacity: 1 }}
+                transition={{ duration: 0.2 }}
                 className="font-bold text-indigo-400"
               >
                 {showResult ? step.abilityAfter : step.abilityBefore} pts
               </motion.span>
             </div>
-            <div className="rounded bg-muted/40 p-2 text-center">
-              <span className="text-muted-foreground block text-[10px] mb-0.5">Next Difficulty</span>
-              <span className={`font-semibold ${showResult ? step.difficultyColor : "text-muted-foreground"}`}>
+            <div className="rounded bg-zinc-900/60 p-2 text-center border border-zinc-800/60">
+              <span className="text-zinc-400 block text-[10px] mb-0.5">Next Difficulty</span>
+              <span className={`font-semibold ${showResult ? step.difficultyColor : "text-zinc-400"}`}>
                 {showResult ? step.nextDifficulty.split(" ")[0] + " " + step.nextDifficulty.split(" ")[1] : "Pending…"}
               </span>
             </div>
