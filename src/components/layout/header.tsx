@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { BrainCircuit, ArrowRight } from "lucide-react";
-import { motion } from "motion/react";
+import { AdaptiveLogicDialog } from "@/components/landing/adaptive-logic-dialog";
 
 export function Header() {
   return (
@@ -25,10 +25,16 @@ export function Header() {
           <Link href="#features" className="transition-colors hover:text-foreground">
             Platform Capabilities
           </Link>
-          <Link href="#adaptive-engine" className="transition-colors hover:text-foreground flex items-center gap-1">
-            <span>Adaptive Logic</span>
-            <span className="flex h-1.5 w-1.5 rounded-full bg-indigo-500"></span>
-          </Link>
+          
+          {/* Functional Adaptive Logic Dialog trigger without blue dot */}
+          <AdaptiveLogicDialog
+            trigger={
+              <button type="button" className="transition-colors hover:text-foreground cursor-pointer font-medium text-muted-foreground">
+                Adaptive Logic
+              </button>
+            }
+          />
+
           <Link href="#preview" className="transition-colors hover:text-foreground">
             Live Preview
           </Link>

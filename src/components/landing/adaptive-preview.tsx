@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useState, useReducer } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { CheckCircle2, XCircle, Sparkles, TrendingUp, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AdaptiveLogicDialog } from "./adaptive-logic-dialog";
+import {
+  CheckCircle2,
+  XCircle,
+  Sparkles,
+  TrendingUp,
+  ArrowRight,
+  BrainCircuit,
+} from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine } from "recharts";
 
 // --- Demo question sequence showing adaptation ---
@@ -147,10 +156,10 @@ export function AdaptivePreview() {
   return (
     <Card className="relative overflow-hidden border border-border/80 bg-card/60 backdrop-blur-xl shadow-2xl p-5 sm:p-6 text-foreground">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/60 pb-4 mb-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4 mb-5">
         <div className="flex items-center gap-3">
           <motion.div
-            className="h-2.5 w-2.5 rounded-full bg-emerald-500"
+            className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0"
             animate={shouldReduceMotion ? {} : { opacity: [1, 0.4, 1] }}
             transition={{ duration: 2, repeat: Infinity }}
           />
@@ -163,13 +172,30 @@ export function AdaptivePreview() {
             </h4>
           </div>
         </div>
-        <Badge
-          variant="outline"
-          className="bg-indigo-500/10 border-indigo-500/30 text-indigo-400 text-xs gap-1.5 py-1"
-        >
-          <Sparkles className="h-3 w-3" />
-          Live Demo
-        </Badge>
+
+        <div className="flex items-center gap-2">
+          {/* Separate informational control — opens explanation dialog without activating/resetting preview */}
+          <AdaptiveLogicDialog
+            trigger={
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 text-xs gap-1.5 border-indigo-500/40 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/20 hover:text-indigo-200 transition-colors shadow-sm cursor-pointer"
+              >
+                <BrainCircuit className="h-3.5 w-3.5 text-indigo-400" />
+                <span>Adaptive Logic</span>
+              </Button>
+            }
+          />
+
+          <Badge
+            variant="outline"
+            className="bg-indigo-500/10 border-indigo-500/30 text-indigo-400 text-xs gap-1.5 py-1.5 hidden sm:inline-flex"
+          >
+            <Sparkles className="h-3 w-3" />
+            Live Demo
+          </Badge>
+        </div>
       </div>
 
       {/* Main grid */}
