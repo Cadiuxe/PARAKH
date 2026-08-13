@@ -1,29 +1,40 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Sparkles, Zap, BarChart3, ChevronRight } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion, useSpring } from "motion/react";
 import { AdaptivePreview } from "./adaptive-preview";
 import { DotGridBackground } from "./dot-grid-background";
 
 export function Hero() {
   const shouldReduceMotion = useReducedMotion();
-  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+  const headlineRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (shouldReduceMotion) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5; // -0.5 to 0.5
-    const y = (e.clientY - rect.top) / rect.height - 0.5; // -0.5 to 0.5
-    setCursorPos({ x, y });
-  }, [shouldReduceMotion]);
+  // Spring-smoothed rotation values
+  const rotateY = useSpring(0, { stiffness: 180, damping: 22, mass: 0.5 });
+  const rotateX = useSpring(0, { stiffness: 180, damping: 22, mass: 0.5 });
 
-  const handleMouseLeave = useCallback(() => {
-    setCursorPos({ x: 0, y: 0 });
-  }, []);
+  const handleHeadlineMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (shouldReduceMotion || !headlineRef.current) return;
+      const rect = headlineRef.current.getBoundingClientRect();
+      // Normalized -0.5 to +0.5
+      const nx = (e.clientX - rect.left) / rect.width - 0.5;
+      const ny = (e.clientY - rect.top) / rect.height - 0.5;
+      // Very small amplitude — feels like physical depth, not dramatic tilt
+      rotateY.set(nx * 6);
+      rotateX.set(-ny * 3);
+    },
+    [shouldReduceMotion, rotateX, rotateY]
+  );
+
+  const handleHeadlineMouseLeave = useCallback(() => {
+    rotateY.set(0);
+    rotateX.set(0);
+  }, [rotateX, rotateY]);
 
   const handleScrollTo = (id: string) => {
     const el = document.getElementById(id);
@@ -34,8 +45,6 @@ export function Hero() {
 
   return (
     <section
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
       className="relative overflow-hidden pt-8 pb-20 md:pt-14 md:pb-28"
     >
       {/* Interactive Dot-Grid Hero Background */}
@@ -60,44 +69,32 @@ export function Hero() {
             </Badge>
           </motion.div>
 
-          {/* Hero Main Headline with Interactive Depth */}
+          {/* Hero Main Headline — subtle 3D depth tilt */}
           <motion.div
             initial={shouldReduceMotion ? {} : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.08 }}
             className="space-y-1"
           >
-            <motion.h1
-              animate={
-                shouldReduceMotion
-                  ? {}
-                  : {
-                      x: cursorPos.x * 8,
-                      y: cursorPos.y * 5,
-                    }
-              }
-              transition={{ type: "spring", stiffness: 150, damping: 20, mass: 0.2 }}
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-zinc-100 leading-[1.12]"
-            >
-              Assess Smarter.
-            </motion.h1>
-
-            <motion.h1
-              animate={
-                shouldReduceMotion
-                  ? {}
-                  : {
-                      x: cursorPos.x * -6,
-                      y: cursorPos.y * -4,
-                    }
-              }
-              transition={{ type: "spring", stiffness: 150, damping: 20, mass: 0.2 }}
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.12]"
-            >
-              <span className="bg-gradient-to-r from-zinc-100 via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
-                Learn Deeper.
-              </span>
-            </motion.h1>
+            {/* Perspective wrapper — must be on parent for correct 3D depth */}
+            <div className="[perspective:900px]">
+              <motion.div
+                ref={headlineRef}
+                onMouseMove={handleHeadlineMouseMove}
+                onMouseLeave={handleHeadlineMouseLeave}
+                style={shouldReduceMotion ? {} : { rotateY, rotateX }}
+                className="cursor-default select-none"
+              >
+                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-zinc-100 leading-[1.12]">
+                  Assess Smarter.
+                </h1>
+                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.12]">
+                  <span className="bg-gradient-to-r from-zinc-100 via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
+                    Learn Deeper.
+                  </span>
+                </h1>
+              </motion.div>
+            </div>
           </motion.div>
 
           {/* Supporting Copy */}

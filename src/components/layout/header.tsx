@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { BrainCircuit, ArrowRight, User, ShieldAlert, LogOut, ChevronDown } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { AdaptiveLogicDialog } from "@/components/landing/adaptive-logic-dialog";
 import { useAuth } from "@/lib/auth-context";
 
@@ -18,13 +18,63 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
+// Nav item IDs for the glass slider
+const NAV_ITEMS = ["features", "adaptive", "preview", "dashboard"] as const;
+type NavId = (typeof NAV_ITEMS)[number];
+
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [hoveredNav, setHoveredNav] = useState<NavId | null>(null);
+
+  // Refs for each nav item — used to read their position for the glass slider
+  const navRefs = useRef<Partial<Record<NavId, HTMLDivElement | null>>>({});
+  const navContainerRef = useRef<HTMLElement>(null);
+
+  // Glass slider position state
+  const [glassRect, setGlassRect] = useState<{
+    left: number;
+    width: number;
+    top: number;
+    height: number;
+  } | null>(null);
+
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const { user, profile, signOut } = useAuth();
 
   const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
+
+  // Update glass slider rect when hovered item changes
+  const updateGlass = useCallback((id: NavId | null) => {
+    if (!id) {
+      setGlassRect(null);
+      return;
+    }
+    const el = navRefs.current[id];
+    const nav = navContainerRef.current;
+    if (!el || !nav) return;
+    const elRect = el.getBoundingClientRect();
+    const navRect = nav.getBoundingClientRect();
+    setGlassRect({
+      left: elRect.left - navRect.left,
+      top: elRect.top - navRect.top,
+      width: elRect.width,
+      height: elRect.height,
+    });
+  }, []);
+
+  const handleNavEnter = useCallback(
+    (id: NavId) => {
+      setHoveredNav(id);
+      updateGlass(id);
+    },
+    [updateGlass]
+  );
+
+  const handleNavLeave = useCallback(() => {
+    setHoveredNav(null);
+    setGlassRect(null);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -84,39 +134,97 @@ export function Header() {
           </div>
         </Link>
 
-        {/* Centered Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-7 text-xs font-medium text-zinc-400">
-          <a
-            href="#features"
-            onClick={(e) => handleSectionScroll(e, "features")}
-            className="transition-colors hover:text-zinc-100 cursor-pointer"
+        {/* Centered Desktop Navigation Links — single shared glass slider */}
+        <nav
+          ref={navContainerRef}
+          className="hidden md:flex items-center relative text-xs font-medium text-zinc-400"
+          onMouseLeave={handleNavLeave}
+        >
+          {/* Shared glass surface — positioned absolutely within the nav */}
+          <AnimatePresence>
+            {glassRect && (
+              <motion.div
+                key="glass"
+                className="absolute rounded-md bg-zinc-800/55 border border-zinc-700/40 pointer-events-none"
+                initial={{ opacity: 0 }}
+                animate={{
+                  opacity: 1,
+                  left: glassRect.left,
+                  top: glassRect.top,
+                  width: glassRect.width,
+                  height: glassRect.height,
+                }}
+                exit={{ opacity: 0 }}
+                transition={{
+                  opacity: { duration: 0.12 },
+                  left: { type: "spring", stiffness: 420, damping: 32, mass: 0.6 },
+                  top: { type: "spring", stiffness: 420, damping: 32, mass: 0.6 },
+                  width: { type: "spring", stiffness: 420, damping: 32, mass: 0.6 },
+                  height: { type: "spring", stiffness: 420, damping: 32, mass: 0.6 },
+                }}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Platform Capabilities */}
+          <div
+            ref={(el) => { navRefs.current.features = el; }}
+            onMouseEnter={() => handleNavEnter("features")}
           >
-            Platform Capabilities
-          </a>
+            <a
+              href="#features"
+              onClick={(e) => handleSectionScroll(e, "features")}
+              className="relative z-10 block px-3 py-1.5 transition-colors hover:text-zinc-100 cursor-pointer"
+            >
+              Platform Capabilities
+            </a>
+          </div>
 
-          {/* Functional Adaptive Logic Dialog trigger without blue dot */}
-          <AdaptiveLogicDialog
-            trigger={
-              <button
-                type="button"
-                className="transition-colors hover:text-zinc-100 cursor-pointer font-medium text-zinc-400"
-              >
-                Adaptive Logic
-              </button>
-            }
-          />
-
-          <a
-            href="#preview"
-            onClick={(e) => handleSectionScroll(e, "preview")}
-            className="transition-colors hover:text-zinc-100 cursor-pointer"
+          {/* Adaptive Logic */}
+          <div
+            ref={(el) => { navRefs.current.adaptive = el; }}
+            onMouseEnter={() => handleNavEnter("adaptive")}
           >
-            Live Preview
-          </a>
+            <div className="relative z-10 px-3 py-1.5">
+              <AdaptiveLogicDialog
+                trigger={
+                  <button
+                    type="button"
+                    className="transition-colors hover:text-zinc-100 cursor-pointer font-medium text-zinc-400"
+                  >
+                    Adaptive Logic
+                  </button>
+                }
+              />
+            </div>
+          </div>
 
-          <Link href="/dashboard" className="transition-colors hover:text-zinc-100">
-            Student Dashboard
-          </Link>
+          {/* Live Preview */}
+          <div
+            ref={(el) => { navRefs.current.preview = el; }}
+            onMouseEnter={() => handleNavEnter("preview")}
+          >
+            <a
+              href="#preview"
+              onClick={(e) => handleSectionScroll(e, "preview")}
+              className="relative z-10 block px-3 py-1.5 transition-colors hover:text-zinc-100 cursor-pointer"
+            >
+              Live Preview
+            </a>
+          </div>
+
+          {/* Student Dashboard */}
+          <div
+            ref={(el) => { navRefs.current.dashboard = el; }}
+            onMouseEnter={() => handleNavEnter("dashboard")}
+          >
+            <Link
+              href="/dashboard"
+              className="relative z-10 block px-3 py-1.5 transition-colors hover:text-zinc-100"
+            >
+              Student Dashboard
+            </Link>
+          </div>
         </nav>
 
         {/* Action Buttons Right */}

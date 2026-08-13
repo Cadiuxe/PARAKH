@@ -15,124 +15,176 @@ export function DotGridBackground() {
     if (!ctx) return;
 
     let animationFrameId: number;
-    let width = (canvas.width = canvas.parentElement?.clientWidth || window.innerWidth);
-    let height = (canvas.height = canvas.parentElement?.clientHeight || window.innerHeight);
+    let running = true;
+    let width = 0;
+    let height = 0;
+    let dpr = 1;
 
-    let mouseX = -1000;
-    let mouseY = -1000;
+    // Size the canvas to fill its parent, accounting for device pixel ratio
+    const setSize = () => {
+      const section = canvas.parentElement;
+      if (!section) return;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const cssW = section.offsetWidth;
+      const cssH = section.offsetHeight;
+      // Set canvas physical size
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
+      // CSS size stays at 100%×100% via Tailwind
+      width = cssW;
+      height = cssH;
+      ctx.scale(dpr, dpr);
+    };
+    setSize();
+
+    // Raw pointer position in CSS pixels relative to canvas
+    let mouseX = -9999;
+    let mouseY = -9999;
     let scrollY = window.scrollY;
 
-    const gridSpacing = 28;
-    const baseRadius = 1.2;
-    const hoverRadius = 130;
+    // ── Grid constants ────────────────────────────────────────────────────────
+    const SPACING = 26;         // px between dot centers (CSS pixels)
+    const BASE_R = 1.0;         // resting radius
+    const HOVER_R = 2.4;        // max radius under cursor
+    const HOVER_DIST = 130;     // influence radius in px
+    const BASE_ALPHA = 0.28;    // resting opacity — visible but quiet
+    const HOVER_ALPHA = 0.85;   // peak opacity directly under cursor
 
-    // Resize listener
-    const handleResize = () => {
-      if (!canvas || !canvas.parentElement) return;
-      width = canvas.width = canvas.parentElement.clientWidth;
-      height = canvas.height = canvas.parentElement.clientHeight;
+    // ── Event handlers ────────────────────────────────────────────────────────
+
+    const onResize = () => {
+      // Reset transform before resizing to avoid stacking scales
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      setSize();
     };
 
-    // Mouse listener (desktop only)
-    const handleMouseMove = (e: MouseEvent) => {
+    // Track mouse at window level so it works even when cursor is over
+    // child elements (text, buttons) — then convert to canvas-local coords
+    const onMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       mouseX = e.clientX - rect.left;
       mouseY = e.clientY - rect.top;
     };
 
-    const handleMouseLeave = () => {
-      mouseX = -1000;
-      mouseY = -1000;
+    const onMouseLeave = (e: MouseEvent) => {
+      // Only clear when pointer leaves the whole section
+      const section = canvas.parentElement;
+      if (!section) { mouseX = -9999; mouseY = -9999; return; }
+      const rect = section.getBoundingClientRect();
+      const inside =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom;
+      if (!inside) {
+        mouseX = -9999;
+        mouseY = -9999;
+      }
     };
 
-    // Scroll listener
-    const handleScroll = () => {
+    const onScroll = () => {
       scrollY = window.scrollY;
     };
 
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    
-    // Attach mouse listeners to parent container if available
-    const parent = canvas.parentElement || window;
-    parent.addEventListener("mousemove", handleMouseMove as any);
-    parent.addEventListener("mouseleave", handleMouseLeave as any);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseleave", onMouseLeave);
 
-    // Render loop
+    // ── Render loop ───────────────────────────────────────────────────────────
+
     const render = () => {
-      ctx.clearRect(0, 0, width, height);
+      if (!running) return;
+      animationFrameId = requestAnimationFrame(render);
 
-      // Fade grid as hero leaves viewport
-      const fadeFactor = Math.max(0, 1 - scrollY / (height * 0.9));
-      if (fadeFactor <= 0) {
-        animationFrameId = requestAnimationFrame(render);
-        return;
+      // Re-check size each frame in case of layout reflow
+      const section = canvas.parentElement;
+      if (section && (section.offsetWidth !== width || section.offsetHeight !== height)) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        setSize();
       }
 
-      const rows = Math.ceil(height / gridSpacing);
-      const cols = Math.ceil(width / gridSpacing);
+      ctx.clearRect(0, 0, width, height);
 
-      // Subtle parallax offset
-      const parallaxY = scrollY * 0.12;
+      // Fade grid as hero scrolls past viewport
+      const fadeFactor = Math.max(0, 1 - scrollY / (height * 0.9));
+      if (fadeFactor <= 0) return;
+
+      // Very restrained parallax upward drift
+      const parallaxOffsetY = scrollY * 0.05;
+
+      const cols = Math.ceil(width / SPACING) + 2;
+      const rows = Math.ceil(height / SPACING) + 2;
 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          const defaultX = c * gridSpacing + gridSpacing / 2;
-          const defaultY = r * gridSpacing + gridSpacing / 2 - parallaxY;
+          const x = c * SPACING + SPACING * 0.5;
+          const y = r * SPACING + SPACING * 0.5 - parallaxOffsetY;
 
-          // Skip drawing if outside visible canvas
-          if (defaultY < -10 || defaultY > height + 10) continue;
+          if (y < -SPACING || y > height + SPACING) continue;
 
-          let dotX = defaultX;
-          let dotY = defaultY;
-          let currentRadius = baseRadius;
-          let alpha = 0.18 * fadeFactor;
+          let alpha = BASE_ALPHA;
+          let radius = BASE_R;
 
-          if (!shouldReduceMotion && mouseX > 0 && mouseY > 0) {
-            const dx = mouseX - defaultX;
-            const dy = mouseY - defaultY;
+          if (!shouldReduceMotion && mouseX > -9000) {
+            const dx = mouseX - x;
+            const dy = mouseY - y;
             const dist = Math.sqrt(dx * dx + dy * dy);
 
-            if (dist < hoverRadius) {
-              const factor = 1 - dist / hoverRadius;
-              // Subtle position displacement
-              const moveAmount = factor * 4;
-              dotX = defaultX + (dx / dist) * moveAmount;
-              dotY = defaultY + (dy / dist) * moveAmount;
-
-              // Radius & Brightness increase
-              currentRadius = baseRadius + factor * 1.5;
-              alpha = (0.18 + factor * 0.45) * fadeFactor;
+            if (dist < HOVER_DIST) {
+              // Smoothstep falloff — physically believable, not sharp
+              const t = 1 - dist / HOVER_DIST;
+              const falloff = t * t * (3 - 2 * t);
+              alpha = BASE_ALPHA + (HOVER_ALPHA - BASE_ALPHA) * falloff;
+              radius = BASE_R + (HOVER_R - BASE_R) * falloff;
             }
           }
 
           ctx.beginPath();
-          ctx.arc(dotX, dotY, currentRadius, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(161, 161, 170, ${alpha})`;
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(228, 228, 231, ${(alpha * fadeFactor).toFixed(3)})`;
           ctx.fill();
         }
       }
-
-      if (!shouldReduceMotion) {
-        animationFrameId = requestAnimationFrame(render);
-      }
     };
 
-    render();
+    if (shouldReduceMotion) {
+      // Single static render — no loop
+      ctx.clearRect(0, 0, width, height);
+      const rows = Math.ceil(height / SPACING) + 2;
+      const cols = Math.ceil(width / SPACING) + 2;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = c * SPACING + SPACING * 0.5;
+          const y = r * SPACING + SPACING * 0.5;
+          ctx.beginPath();
+          ctx.arc(x, y, BASE_R, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(228, 228, 231, ${BASE_ALPHA})`;
+          ctx.fill();
+        }
+      }
+    } else {
+      render();
+    }
 
     return () => {
+      running = false;
       cancelAnimationFrame(animationFrameId);
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("scroll", handleScroll);
-      parent.removeEventListener("mousemove", handleMouseMove as any);
-      parent.removeEventListener("mouseleave", handleMouseLeave as any);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseleave", onMouseLeave);
     };
   }, [shouldReduceMotion]);
 
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0 pointer-events-none -z-10 w-full h-full"
+      // z-0 keeps the canvas in normal stacking, below the z-10 content div
+      // but above the page background (which has no z-index / z=auto)
+      // pointer-events-none ensures clicks pass through to buttons/links
+      className="absolute inset-0 pointer-events-none w-full h-full"
+      style={{ zIndex: 0 }}
       aria-hidden="true"
     />
   );
