@@ -2,18 +2,22 @@
  * PARAKH — Supabase Database Type Definitions
  *
  * These types mirror the PostgreSQL schema exactly.
- * Generated manually to match the migration in:
- *   supabase/migrations/20240101000000_parakh_foundation.sql
- *
- * In a future phase these can be auto-generated via:
- *   npx supabase gen types typescript --project-id <ref> > src/lib/db/types.ts
+ * Formatted to match standard Supabase CLI generated types.
  *
  * Do not add business logic here — only database types.
  */
 
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
 // ─── Row types (what the DB returns) ─────────────────────────────────────────
 
-export interface ProfileRow {
+export type ProfileRow = {
   id: string; // uuid — same as auth.users.id
   full_name: string;
   roll_number: string | null;
@@ -21,18 +25,18 @@ export interface ProfileRow {
   role: "student" | "admin";
   created_at: string; // ISO timestamptz
   updated_at: string;
-}
+};
 
-export interface TopicRow {
+export type TopicRow = {
   id: string; // uuid
   code: string; // 'DSA' | 'DBMS' | 'OS' | 'CN'
   name: string;
   parent_id: string | null;
   display_order: number;
   created_at: string;
-}
+};
 
-export interface QuestionRow {
+export type QuestionRow = {
   id: string; // uuid
   topic_id: string;
   subtopic: string;
@@ -50,14 +54,14 @@ export interface QuestionRow {
   incorrect_count: number;
   created_at: string;
   updated_at: string;
-}
+};
 
 /**
  * Safe question fields that can be sent to the client.
  * Does NOT include correct_option_index or explanation.
  * Use this type when serving questions to students.
  */
-export interface QuestionSafeRow {
+export type QuestionSafeRow = {
   id: string;
   topic_id: string;
   subtopic: string;
@@ -65,9 +69,9 @@ export interface QuestionSafeRow {
   difficulty_label: string;
   question_text: string;
   options: string[];
-}
+};
 
-export interface SessionRow {
+export type SessionRow = {
   id: string; // uuid
   student_id: string;
   topic_filter: "Mixed" | "DSA" | "DBMS" | "OS" | "CN";
@@ -83,9 +87,9 @@ export interface SessionRow {
   status: "completed" | "abandoned";
   started_at: string;
   completed_at: string | null;
-}
+};
 
-export interface ResponseRow {
+export type ResponseRow = {
   id: string; // uuid
   session_id: string;
   question_id: string;
@@ -102,9 +106,9 @@ export interface ResponseRow {
   speed_bonus: number;
   total_score: number;
   answered_at: string;
-}
+};
 
-export interface AbilityEstimateRow {
+export type AbilityEstimateRow = {
   id: string; // uuid
   student_id: string; // uuid -> profiles.id
   topic_id: string; // uuid -> topics.id
@@ -112,7 +116,7 @@ export interface AbilityEstimateRow {
   total_questions: number; // integer
   correct_count: number; // integer
   updated_at: string; // ISO timestamptz
-}
+};
 
 // ─── Insert types (what we send to the DB) ───────────────────────────────────
 
@@ -121,34 +125,37 @@ export interface AbilityEstimateRow {
  * Role is NOT included — the trigger always sets it to 'student'.
  * Never construct this manually in application code.
  */
-export type ProfileInsert = Pick<ProfileRow, "id" | "full_name"> &
-  Partial<Pick<ProfileRow, "roll_number" | "institution">>;
+export type ProfileInsert = {
+  id: string;
+  full_name: string;
+  roll_number?: string | null;
+  institution?: string | null;
+  role?: "student" | "admin";
+  created_at?: string;
+  updated_at?: string;
+};
 
 /**
  * SERVER-ONLY: Used exclusively in Server Actions via the service_role client.
  * Never construct or send this from a browser component.
- *
- * Sensitive fields (correct_count, percentage_score, total_score, total_bonus,
- * ability_start, ability_final, ability_delta) are computed server-side.
- * Students must never supply these values directly.
  */
 export type SessionInsert = Omit<SessionRow, "id">;
 
 /**
  * SERVER-ONLY: Used exclusively in Server Actions via the service_role client.
  * Never construct or send this from a browser component.
- *
- * Sensitive fields (is_correct, ability_before, ability_after, base_score,
- * speed_bonus, total_score) are computed server-side by the adaptive engine.
- * Students must never supply these values directly.
  */
 export type ResponseInsert = Omit<ResponseRow, "id" | "answered_at">;
 
-export type AbilityEstimateInsert = Omit<
-  AbilityEstimateRow,
-  "id" | "updated_at"
-> &
-  Partial<Pick<AbilityEstimateRow, "total_questions" | "correct_count">>;
+export type AbilityEstimateInsert = {
+  id?: string;
+  student_id: string;
+  topic_id: string;
+  ability: number;
+  total_questions?: number;
+  correct_count?: number;
+  updated_at?: string;
+};
 
 // ─── Update types (partial patches) ──────────────────────────────────────────
 
@@ -158,9 +165,11 @@ export type AbilityEstimateInsert = Omit<
  * Use this type in any code path that handles student-initiated updates.
  * Enforced at DB level by the RLS WITH CHECK subquery on profiles.
  */
-export type ProfileStudentUpdate = Partial<
-  Pick<ProfileRow, "full_name" | "roll_number" | "institution">
->;
+export type ProfileStudentUpdate = {
+  full_name?: string;
+  roll_number?: string | null;
+  institution?: string | null;
+};
 
 /**
  * Admin-only profile updates (server-side, service_role only).
@@ -175,43 +184,102 @@ export type AbilityEstimateUpdate = Partial<
 
 // ─── Database interface (for createClient<Database>) ─────────────────────────
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       profiles: {
         Row: ProfileRow;
         Insert: ProfileInsert;
-        // Default Update type is student-safe (excludes role, id, created_at, updated_at).
-        // For admin role changes use ProfileAdminUpdate with the service_role client.
-        Update: ProfileStudentUpdate;
+        Update: {
+          id?: string;
+          full_name?: string;
+          roll_number?: string | null;
+          institution?: string | null;
+          role?: "student" | "admin";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       topics: {
         Row: TopicRow;
-        Insert: Omit<TopicRow, "id" | "created_at">;
-        Update: Partial<TopicRow>;
+        Insert: {
+          id?: string;
+          code: string;
+          name: string;
+          parent_id?: string | null;
+          display_order?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          code?: string;
+          name?: string;
+          parent_id?: string | null;
+          display_order?: number;
+          created_at?: string;
+        };
+        Relationships: [];
       };
       questions: {
         Row: QuestionRow;
-        Insert: Omit<QuestionRow, "id" | "created_at" | "updated_at"> &
-          Partial<
-            Pick<QuestionRow, "times_used" | "correct_count" | "incorrect_count">
-          >;
-        Update: Partial<QuestionRow>;
+        Insert: {
+          id?: string;
+          topic_id: string;
+          subtopic: string;
+          difficulty_level: 1 | 2 | 3 | 4 | 5;
+          difficulty_label: string;
+          question_text: string;
+          options: string[];
+          correct_option_index: 0 | 1 | 2 | 3;
+          explanation?: string | null;
+          source?: "question_bank" | "ai_generated";
+          review_status?: "approved" | "pending" | "rejected";
+          is_active?: boolean;
+          times_used?: number;
+          correct_count?: number;
+          incorrect_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          topic_id?: string;
+          subtopic?: string;
+          difficulty_level?: 1 | 2 | 3 | 4 | 5;
+          difficulty_label?: string;
+          question_text?: string;
+          options?: string[];
+          correct_option_index?: 0 | 1 | 2 | 3;
+          explanation?: string | null;
+          source?: "question_bank" | "ai_generated";
+          review_status?: "approved" | "pending" | "rejected";
+          is_active?: boolean;
+          times_used?: number;
+          correct_count?: number;
+          incorrect_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       sessions: {
         Row: SessionRow;
         Insert: SessionInsert;
         Update: Partial<SessionRow>;
+        Relationships: [];
       };
       responses: {
         Row: ResponseRow;
         Insert: ResponseInsert;
         Update: Partial<ResponseRow>;
+        Relationships: [];
       };
       ability_estimates: {
         Row: AbilityEstimateRow;
         Insert: AbilityEstimateInsert;
         Update: AbilityEstimateUpdate;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;
@@ -223,4 +291,4 @@ export interface Database {
     };
     Enums: Record<string, never>;
   };
-}
+};

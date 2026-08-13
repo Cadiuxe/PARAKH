@@ -1,14 +1,12 @@
 /**
  * PARAKH — Supabase Browser Client
  *
- * Use this client in Client Components for auth state only (sign-in, sign-out, session).
- * Do NOT use this client to query application data — that must go through
- * Server Actions using server-client.ts.
- *
+ * Uses @supabase/ssr createBrowserClient for browser component authentication and session persistence.
  * Uses the public anon key — safe for browser bundles.
  */
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 
 let _client: SupabaseClient<Database> | null = null;
@@ -33,6 +31,6 @@ export function getSupabaseClient(): SupabaseClient<Database> {
     );
   }
 
-  _client = createClient<Database>(supabaseUrl, supabaseAnonKey);
+  _client = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey);
   return _client;
 }

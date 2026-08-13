@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SidebarContent } from "./sidebar";
 import { Menu, Search, Bell } from "lucide-react";
-import { MOCK_STUDENT } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth-context";
 
 // Derive initials from name
 function getInitials(name: string) {
+  if (!name) return "ST";
   return name
     .split(" ")
     .map((w) => w[0])
@@ -20,8 +21,12 @@ function getInitials(name: string) {
 }
 
 export function DashboardHeader() {
+  const { user, profile } = useAuth();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+
+  const displayName = profile?.full_name || user?.email?.split("@")[0] || "Student";
+  const displayRole = profile?.roll_number || (profile?.role === "admin" ? "Admin" : "Student");
 
   // Close when clicking outside
   useEffect(() => {
@@ -98,7 +103,7 @@ export function DashboardHeader() {
               {/* Header */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
                 <span className="text-sm font-semibold text-foreground">Notifications</span>
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Demo</span>
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">System</span>
               </div>
 
               {/* Empty state */}
@@ -119,15 +124,15 @@ export function DashboardHeader() {
         <div className="flex items-center gap-2 pl-2 border-l border-border/60">
           <Avatar className="h-9 w-9 border border-indigo-500/30">
             <AvatarFallback className="bg-indigo-600 text-white font-bold text-xs">
-              {getInitials(MOCK_STUDENT.name)}
+              {getInitials(displayName)}
             </AvatarFallback>
           </Avatar>
           <div className="hidden md:flex flex-col text-left">
             <span className="text-xs font-semibold text-foreground leading-none">
-              {MOCK_STUDENT.name}
+              {displayName}
             </span>
             <span className="text-[10px] text-muted-foreground mt-0.5">
-              {MOCK_STUDENT.estimatedAbilityLevel}
+              {displayRole}
             </span>
           </div>
         </div>

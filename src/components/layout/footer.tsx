@@ -1,7 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import { BrainCircuit } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 export function Footer() {
+  const { profile } = useAuth();
+
   return (
     <footer className="border-t border-border/40 bg-background/60 py-12 text-sm text-muted-foreground">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -23,9 +28,11 @@ export function Footer() {
           <Link href="/results" className="hover:text-foreground transition-colors">
             Analytics & Results
           </Link>
-          <Link href="/admin" className="hover:text-foreground transition-colors">
-            Admin Review Queue
-          </Link>
+          {profile?.role === "admin" && (
+            <Link href="/admin" className="hover:text-foreground transition-colors">
+              Admin Review Queue
+            </Link>
+          )}
         </div>
 
         <p className="text-xs text-muted-foreground">

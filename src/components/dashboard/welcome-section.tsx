@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Play } from "lucide-react";
-import { MOCK_STUDENT } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth-context";
 import {
   getStoredAssessments,
   getLatestAssessment,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/assessment-storage";
 
 export function WelcomeSection() {
+  const { user, profile } = useAuth();
   const [assessments, setAssessments] = useState<CompletedAssessment[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -22,6 +23,7 @@ export function WelcomeSection() {
     setIsLoaded(true);
   }, []);
 
+  const displayName = profile?.full_name || user?.email?.split("@")[0] || "Student";
   const hasData = assessments.length > 0;
   const latest = getLatestAssessment();
 
@@ -46,7 +48,7 @@ export function WelcomeSection() {
             {hasData ? `${assessments.length} Session${assessments.length > 1 ? "s" : ""} Recorded` : "Ready to Start"}
           </Badge>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-            Welcome, {MOCK_STUDENT.name}
+            Welcome, {displayName}
           </h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
             {hasData ? (

@@ -9,13 +9,12 @@ import {
   LineChart,
   Settings,
   ShieldAlert,
-  GraduationCap,
   LogOut,
   HelpCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MOCK_STUDENT } from "@/lib/mock-data";
+import { useAuth } from "@/lib/auth-context";
 
 export interface NavItem {
   title: string;
@@ -61,8 +60,29 @@ export const secondaryNavItems: NavItem[] = [
   },
 ];
 
+function getInitials(name: string) {
+  if (!name) return "ST";
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export function SidebarContent() {
   const pathname = usePathname();
+  const { user, profile, signOut } = useAuth();
+
+  const displayName = profile?.full_name || user?.email?.split("@")[0] || "Student";
+  const displayId = profile?.roll_number || user?.email || "Student";
+
+  const visibleNavItems = mainNavItems.filter((item) => {
+    if (item.href === "/admin") {
+      return profile?.role === "admin";
+    }
+    return true;
+  });
 
   return (
     <div className="flex h-full flex-col justify-between p-4 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
@@ -83,7 +103,7 @@ export function SidebarContent() {
           <div className="px-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
             Navigation
           </div>
-          {mainNavItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
@@ -131,19 +151,25 @@ export function SidebarContent() {
         </div>
       </div>
 
-      {/* User Info & Quick Logout stub */}
+      {/* User Info & Logout button */}
       <div className="pt-4 border-t border-sidebar-border">
         <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-muted/40">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-xs">
-              {MOCK_STUDENT.name.split(" ").map((w: string) => w[0]).join("")}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-xs">
+              {getInitials(displayName)}
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold text-foreground">{MOCK_STUDENT.name}</span>
-              <span className="text-[10px] text-muted-foreground">{MOCK_STUDENT.rollNumber}</span>
+            <div className="flex flex-col truncate">
+              <span className="text-xs font-semibold text-foreground truncate">{displayName}</span>
+              <span className="text-[10px] text-muted-foreground truncate">{displayId}</span>
             </div>
           </div>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => signOut()}
+            title="Sign Out"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
+          >
             <LogOut className="h-4 w-4" />
           </Button>
         </div>

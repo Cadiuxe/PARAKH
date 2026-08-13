@@ -4,17 +4,53 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Settings, Sliders, Bell, Moon, User, Save } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Sliders, User, Save, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
-import { MOCK_STUDENT } from "@/lib/mock-data";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { updateProfile } from "@/lib/db/profiles";
 
 export default function SettingsPage() {
+  const { user, profile, refreshProfile } = useAuth();
   const [adaptiveStrategy, setAdaptiveStrategy] = useState("heuristic");
   const [autoAdvance, setAutoAdvance] = useState(true);
 
-  const handleSave = () => {
-    toast.success("Prototype settings saved successfully");
+  // Profile editable fields
+  const [fullName, setFullName] = useState("");
+  const [rollNumber, setRollNumber] = useState("");
+  const [institution, setInstitution] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (profile) {
+      setFullName(profile.full_name || "");
+      setRollNumber(profile.roll_number || "");
+      setInstitution(profile.institution || "");
+    }
+  }, [profile]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      const updated = await updateProfile(user.id, {
+        full_name: fullName.trim(),
+        roll_number: rollNumber.trim() || null,
+        institution: institution.trim() || null,
+      });
+
+      if (updated) {
+        await refreshProfile();
+        toast.success("Profile and settings updated successfully");
+      } else {
+        toast.error("Failed to update profile");
+      }
+    } catch (err) {
+      toast.error("Error saving profile settings");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -30,7 +66,7 @@ export default function SettingsPage() {
             Platform Settings
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Customize assessment preferences, adaptive engine parameters, and display options.
+            Customize assessment preferences, adaptive engine parameters, and student profile details.
           </p>
         </div>
 
@@ -75,31 +111,67 @@ export default function SettingsPage() {
 
         {/* User Account Settings Card */}
         <Card className="p-6 border border-border/80 bg-card shadow-md space-y-4">
-          <div className="flex items-center gap-2.5 border-b border-border/60 pb-3">
-            <User className="h-5 w-5 text-indigo-400" />
-            <div>
-              <h3 className="text-base font-bold text-foreground">Student Profile Details</h3>
-              <p className="text-xs text-muted-foreground">Mock user identity representation.</p>
+          <div className="flex items-center justify-between border-b border-border/60 pb-3">
+            <div className="flex items-center gap-2.5">
+              <User className="h-5 w-5 text-indigo-400" />
+              <div>
+                <h3 className="text-base font-bold text-foreground">Student Profile Details</h3>
+                <p className="text-xs text-muted-foreground">Authenticated user account settings.</p>
+              </div>
             </div>
+            <Badge variant="outline" className="border-indigo-500/30 text-indigo-400 bg-indigo-500/10 text-xs capitalize">
+              Role: {profile?.role || "Student"}
+            </Badge>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div>
-              <span className="text-muted-foreground block mb-1">Name</span>
-              <div className="p-2.5 rounded-lg border border-border/60 bg-muted/30 font-medium">{MOCK_STUDENT.name}</div>
+            <div className="space-y-1">
+              <label className="text-muted-foreground block font-semibold">Full Name</label>
+              <Input
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Student Full Name"
+                className="bg-muted/40 border-border/80 focus-visible:ring-indigo-500 h-9 text-xs"
+              />
             </div>
-            <div>
-              <span className="text-muted-foreground block mb-1">Identifier</span>
-              <div className="p-2.5 rounded-lg border border-border/60 bg-muted/30 font-medium">{MOCK_STUDENT.rollNumber}</div>
+            <div className="space-y-1">
+              <label className="text-muted-foreground block font-semibold">Student / Roll Number</label>
+              <Input
+                value={rollNumber}
+                onChange={(e) => setRollNumber(e.target.value)}
+                placeholder="e.g. 2024-CS-084"
+                className="bg-muted/40 border-border/80 focus-visible:ring-indigo-500 h-9 text-xs"
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-muted-foreground block font-semibold">Institution / College</label>
+              <Input
+                value={institution}
+                onChange={(e) => setInstitution(e.target.value)}
+                placeholder="e.g. Department of Computer Science"
+                className="bg-muted/40 border-border/80 focus-visible:ring-indigo-500 h-9 text-xs"
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <label className="text-muted-foreground block font-semibold">Account Email (read-only)</label>
+              <Input
+                value={user?.email || ""}
+                disabled
+                className="bg-muted/20 border-border/40 text-muted-foreground h-9 text-xs cursor-not-allowed"
+              />
             </div>
           </div>
         </Card>
 
         {/* Save Actions */}
         <div className="flex justify-end gap-3">
-          <Button onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2">
-            <Save className="h-4 w-4" />
-            <span>Save Preferences</span>
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            <span>{saving ? "Saving…" : "Save Preferences"}</span>
           </Button>
         </div>
       </div>

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -266,10 +268,29 @@ function QuestionCard({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AdminPage() {
+  const { profile, loading } = useAuth();
+  const router = useRouter();
+
   const [questions, setQuestions] = useState<AdminQuestionItem[]>(
     MOCK_ADMIN_QUESTIONS
   );
   const [editingItem, setEditingItem] = useState<AdminQuestionItem | null>(null);
+
+  useEffect(() => {
+    if (!loading && profile && profile.role !== "admin") {
+      router.replace("/dashboard");
+    }
+  }, [loading, profile, router]);
+
+  if (loading || !profile || profile.role !== "admin") {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const updateStatus = (id: string, status: QuestionStatus) => {
     setQuestions((prev) =>
