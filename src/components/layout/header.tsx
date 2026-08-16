@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { BrainCircuit, ArrowRight, User, ShieldAlert, LogOut, ChevronDown } from "lucide-react";
+import { ArrowRight, User, ShieldAlert, LogOut, ChevronDown } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { AdaptiveLogicDialog } from "@/components/landing/adaptive-logic-dialog";
 import { useAuth } from "@/lib/auth-context";
+import { MulyanLogo } from "@/components/ui/mulyan-logo";
 
 function getInitials(name: string) {
   if (!name) return "U";
@@ -26,55 +27,10 @@ export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [hoveredNav, setHoveredNav] = useState<NavId | null>(null);
-
-  // Refs for each nav item — used to read their position for the glass slider
-  const navRefs = useRef<Partial<Record<NavId, HTMLDivElement | null>>>({});
-  const navContainerRef = useRef<HTMLElement>(null);
-
-  // Glass slider position state
-  const [glassRect, setGlassRect] = useState<{
-    left: number;
-    width: number;
-    top: number;
-    height: number;
-  } | null>(null);
-
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const { user, profile, signOut } = useAuth();
 
   const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
-
-  // Update glass slider rect when hovered item changes
-  const updateGlass = useCallback((id: NavId | null) => {
-    if (!id) {
-      setGlassRect(null);
-      return;
-    }
-    const el = navRefs.current[id];
-    const nav = navContainerRef.current;
-    if (!el || !nav) return;
-    const elRect = el.getBoundingClientRect();
-    const navRect = nav.getBoundingClientRect();
-    setGlassRect({
-      left: elRect.left - navRect.left,
-      top: elRect.top - navRect.top,
-      width: elRect.width,
-      height: elRect.height,
-    });
-  }, []);
-
-  const handleNavEnter = useCallback(
-    (id: NavId) => {
-      setHoveredNav(id);
-      updateGlass(id);
-    },
-    [updateGlass]
-  );
-
-  const handleNavLeave = useCallback(() => {
-    setHoveredNav(null);
-    setGlassRect(null);
-  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -124,57 +80,38 @@ export function Header() {
         }`}
       >
         {/* Brand Logo */}
-        <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-90 shrink-0">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-md shadow-indigo-500/20">
-            <BrainCircuit className="h-4.5 w-4.5" />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-extrabold text-base tracking-tight text-zinc-100">PARAKH</span>
-            <span className="text-[9px] text-zinc-400 -mt-1 tracking-wider uppercase">Adaptive CAT</span>
-          </div>
+        <Link href="/" className="flex items-center transition-opacity hover:opacity-90 shrink-0">
+          <MulyanLogo size="sm" />
         </Link>
 
-        {/* Centered Desktop Navigation Links — single shared glass slider */}
+        {/* Centered Desktop Navigation Links — Continuous Shared Glass Surface */}
         <nav
-          ref={navContainerRef}
-          className="hidden md:flex items-center relative text-xs font-medium text-zinc-400"
-          onMouseLeave={handleNavLeave}
+          className="hidden md:flex items-center relative text-xs font-medium text-zinc-400 p-1"
+          onMouseLeave={() => setHoveredNav(null)}
         >
-          {/* Shared glass surface — positioned absolutely within the nav */}
-          <AnimatePresence>
-            {glassRect && (
+          {/* Platform Capabilities */}
+          <div
+            className="relative px-3 py-1.5 cursor-pointer"
+            onMouseEnter={() => setHoveredNav("features")}
+          >
+            {hoveredNav === "features" && (
               <motion.div
-                key="glass"
-                className="absolute rounded-md bg-zinc-800/55 border border-zinc-700/40 pointer-events-none"
-                initial={{ opacity: 0 }}
-                animate={{
-                  opacity: 1,
-                  left: glassRect.left,
-                  top: glassRect.top,
-                  width: glassRect.width,
-                  height: glassRect.height,
-                }}
-                exit={{ opacity: 0 }}
+                layoutId="header-glass-slider"
+                className="absolute inset-0 rounded-full bg-zinc-800/65 border border-zinc-700/40 shadow-sm backdrop-blur-md"
                 transition={{
-                  opacity: { duration: 0.12 },
-                  left: { type: "spring", stiffness: 420, damping: 32, mass: 0.6 },
-                  top: { type: "spring", stiffness: 420, damping: 32, mass: 0.6 },
-                  width: { type: "spring", stiffness: 420, damping: 32, mass: 0.6 },
-                  height: { type: "spring", stiffness: 420, damping: 32, mass: 0.6 },
+                  type: "spring",
+                  stiffness: 450,
+                  damping: 32,
+                  mass: 0.6,
                 }}
               />
             )}
-          </AnimatePresence>
-
-          {/* Platform Capabilities */}
-          <div
-            ref={(el) => { navRefs.current.features = el; }}
-            onMouseEnter={() => handleNavEnter("features")}
-          >
             <a
               href="#features"
               onClick={(e) => handleSectionScroll(e, "features")}
-              className="relative z-10 block px-3 py-1.5 transition-colors hover:text-zinc-100 cursor-pointer"
+              className={`relative z-10 block transition-colors duration-150 ${
+                hoveredNav === "features" ? "text-zinc-100 font-medium" : "text-zinc-400 hover:text-zinc-200"
+              }`}
             >
               Platform Capabilities
             </a>
@@ -182,15 +119,29 @@ export function Header() {
 
           {/* Adaptive Logic */}
           <div
-            ref={(el) => { navRefs.current.adaptive = el; }}
-            onMouseEnter={() => handleNavEnter("adaptive")}
+            className="relative px-3 py-1.5 cursor-pointer"
+            onMouseEnter={() => setHoveredNav("adaptive")}
           >
-            <div className="relative z-10 px-3 py-1.5">
+            {hoveredNav === "adaptive" && (
+              <motion.div
+                layoutId="header-glass-slider"
+                className="absolute inset-0 rounded-full bg-zinc-800/65 border border-zinc-700/40 shadow-sm backdrop-blur-md"
+                transition={{
+                  type: "spring",
+                  stiffness: 450,
+                  damping: 32,
+                  mass: 0.6,
+                }}
+              />
+            )}
+            <div className="relative z-10">
               <AdaptiveLogicDialog
                 trigger={
                   <button
                     type="button"
-                    className="transition-colors hover:text-zinc-100 cursor-pointer font-medium text-zinc-400"
+                    className={`transition-colors duration-150 cursor-pointer font-medium ${
+                      hoveredNav === "adaptive" ? "text-zinc-100" : "text-zinc-400 hover:text-zinc-200"
+                    }`}
                   >
                     Adaptive Logic
                   </button>
@@ -201,13 +152,27 @@ export function Header() {
 
           {/* Live Preview */}
           <div
-            ref={(el) => { navRefs.current.preview = el; }}
-            onMouseEnter={() => handleNavEnter("preview")}
+            className="relative px-3 py-1.5 cursor-pointer"
+            onMouseEnter={() => setHoveredNav("preview")}
           >
+            {hoveredNav === "preview" && (
+              <motion.div
+                layoutId="header-glass-slider"
+                className="absolute inset-0 rounded-full bg-zinc-800/65 border border-zinc-700/40 shadow-sm backdrop-blur-md"
+                transition={{
+                  type: "spring",
+                  stiffness: 450,
+                  damping: 32,
+                  mass: 0.6,
+                }}
+              />
+            )}
             <a
               href="#preview"
               onClick={(e) => handleSectionScroll(e, "preview")}
-              className="relative z-10 block px-3 py-1.5 transition-colors hover:text-zinc-100 cursor-pointer"
+              className={`relative z-10 block transition-colors duration-150 ${
+                hoveredNav === "preview" ? "text-zinc-100 font-medium" : "text-zinc-400 hover:text-zinc-200"
+              }`}
             >
               Live Preview
             </a>
@@ -215,12 +180,26 @@ export function Header() {
 
           {/* Student Dashboard */}
           <div
-            ref={(el) => { navRefs.current.dashboard = el; }}
-            onMouseEnter={() => handleNavEnter("dashboard")}
+            className="relative px-3 py-1.5 cursor-pointer"
+            onMouseEnter={() => setHoveredNav("dashboard")}
           >
+            {hoveredNav === "dashboard" && (
+              <motion.div
+                layoutId="header-glass-slider"
+                className="absolute inset-0 rounded-full bg-zinc-800/65 border border-zinc-700/40 shadow-sm backdrop-blur-md"
+                transition={{
+                  type: "spring",
+                  stiffness: 450,
+                  damping: 32,
+                  mass: 0.6,
+                }}
+              />
+            )}
             <Link
               href="/dashboard"
-              className="relative z-10 block px-3 py-1.5 transition-colors hover:text-zinc-100"
+              className={`relative z-10 block transition-colors duration-150 ${
+                hoveredNav === "dashboard" ? "text-zinc-100 font-medium" : "text-zinc-400 hover:text-zinc-200"
+              }`}
             >
               Student Dashboard
             </Link>
@@ -299,16 +278,16 @@ export function Header() {
             </div>
           )}
 
-          {/* Glassy Primary Start Assessment CTA */}
+          {/* Glassy Primary Start Assessment CTA — Restrained outline idle, filled brand state hover */}
           <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
             <Button
               size="sm"
               asChild
-              className="group bg-indigo-600/90 hover:bg-indigo-500 text-white border border-indigo-400/30 rounded-full px-4 h-8 text-xs font-semibold shadow-md shadow-indigo-950/50 backdrop-blur-md transition-all"
+              className="group bg-zinc-950/60 hover:bg-blue-600 text-zinc-200 hover:text-white border border-blue-500/40 hover:border-blue-500 rounded-full px-4 h-8 text-xs font-semibold shadow-sm hover:shadow-md hover:shadow-blue-950/50 backdrop-blur-md transition-all duration-200"
             >
               <Link href="/dashboard" className="flex items-center gap-1.5">
                 <span>Start Assessment</span>
-                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-1" />
+                <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
               </Link>
             </Button>
           </motion.div>

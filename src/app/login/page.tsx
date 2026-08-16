@@ -6,8 +6,9 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { BrainCircuit, ArrowLeft, Eye, EyeOff, Loader2, UserPlus, LogIn } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Loader2, UserPlus, LogIn } from "lucide-react";
 import { getSupabaseClient } from "@/lib/db/client";
+import { MulyanLogoIcon } from "@/components/ui/mulyan-logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -113,22 +114,20 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4 text-foreground relative">
       {/* Ambient background glow */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-indigo-600/10 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none" />
 
       <div className="mx-auto flex w-full max-w-sm flex-col justify-center space-y-6 relative z-10">
         {/* Brand mark */}
         <div className="flex flex-col items-center space-y-3 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">
-            <BrainCircuit className="h-6 w-6" />
-          </div>
+          <MulyanLogoIcon size={48} className="h-12 w-12" />
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              {mode === "signin" ? "Sign in to PARAKH" : "Create PARAKH Account"}
+              {mode === "signin" ? "Sign in to MULYAN" : "Create MULYAN Account"}
             </h1>
             <p className="text-xs text-muted-foreground mt-1">
               {mode === "signin"
-                ? "Access your adaptive testing portal"
-                : "Register for computer adaptive assessment"}
+                ? "Access your adaptive testing portal (Powered by PARAKH)"
+                : "Register for computer adaptive assessment (Powered by PARAKH)"}
             </p>
           </div>
         </div>

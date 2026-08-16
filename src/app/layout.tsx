@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PARAKH — AI-Powered Adaptive Assessment Platform",
-  description: "Computer Adaptive Testing (CAT) platform dynamically adjusting assessment difficulty and topic selection with generative AI capabilities.",
+  title: "MULYAN — AI-Powered Adaptive Assessment Platform (Powered by PARAKH)",
+  description: "MULYAN delivers AI-powered computer adaptive assessments dynamically adjusting difficulty and topic selection, powered by the PARAKH CAT engine.",
 };
 
 export default function RootLayout({

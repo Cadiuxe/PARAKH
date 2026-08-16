@@ -8,6 +8,7 @@ import { ArrowRight, Sparkles, Zap, BarChart3, ChevronRight } from "lucide-react
 import { motion, useReducedMotion, useSpring } from "motion/react";
 import { AdaptivePreview } from "./adaptive-preview";
 import { DotGridBackground } from "./dot-grid-background";
+import { MulyanWordmark } from "@/components/ui/mulyan-wordmark";
 
 export function Hero() {
   const shouldReduceMotion = useReducedMotion();
@@ -69,30 +70,23 @@ export function Hero() {
             </Badge>
           </motion.div>
 
-          {/* Hero Main Headline — subtle 3D depth tilt */}
+          {/* Hero Main Headline — MULYAN Dot-Matrix Vector Wordmark with subtle 3D depth tilt */}
           <motion.div
             initial={shouldReduceMotion ? {} : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.08 }}
-            className="space-y-1"
+            className="w-full flex justify-center py-2"
           >
-            {/* Perspective wrapper — must be on parent for correct 3D depth */}
-            <div className="[perspective:900px]">
+            {/* Perspective wrapper — parent for correct 3D depth */}
+            <div className="[perspective:900px] w-full flex justify-center">
               <motion.div
                 ref={headlineRef}
                 onMouseMove={handleHeadlineMouseMove}
                 onMouseLeave={handleHeadlineMouseLeave}
                 style={shouldReduceMotion ? {} : { rotateY, rotateX }}
-                className="cursor-default select-none"
+                className="cursor-default select-text flex justify-center items-center w-full"
               >
-                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-zinc-100 leading-[1.12]">
-                  Assess Smarter.
-                </h1>
-                <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.12]">
-                  <span className="bg-gradient-to-r from-zinc-100 via-zinc-200 to-zinc-400 bg-clip-text text-transparent">
-                    Learn Deeper.
-                  </span>
-                </h1>
+                <MulyanWordmark className="w-full max-w-md sm:max-w-xl md:max-w-2xl lg:max-w-3xl h-auto" />
               </motion.div>
             </div>
           </motion.div>
@@ -104,43 +98,52 @@ export function Hero() {
             transition={{ duration: 0.35, delay: 0.16 }}
             className="mt-6 text-base sm:text-lg md:text-xl text-zinc-400 max-w-2xl font-normal leading-relaxed"
           >
-            PARAKH delivers AI-powered computer adaptive assessments that dynamically calibrate question difficulty, topic selection, and response timing to match each student&apos;s true proficiency.
+            MULYAN delivers AI-powered computer adaptive assessments that dynamically calibrate question difficulty, topic selection, and response timing to match each student&apos;s true proficiency.
           </motion.p>
 
-          {/* CTAs */}
+          {/* CTAs — Twin components sharing same pill, border, physics, and glass language */}
           <motion.div
             initial={shouldReduceMotion ? {} : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.35, delay: 0.24 }}
             className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto"
           >
-            {/* Primary CTA */}
+            {/* Primary CTA — Stronger fill/contrast */}
             <motion.div
               whileHover={shouldReduceMotion ? {} : { scale: 1.02 }}
-              whileTap={shouldReduceMotion ? {} : { scale: 0.97 }}
+              whileTap={shouldReduceMotion ? {} : { scale: 0.98 }}
               className="w-full sm:w-auto"
             >
               <Button
                 size="lg"
                 asChild
-                className="group w-full sm:w-auto bg-indigo-600/90 hover:bg-indigo-500 text-white border border-indigo-400/30 px-8 py-6 text-base shadow-lg shadow-indigo-950/50 backdrop-blur-md rounded-xl font-semibold transition-all"
+                className="group relative w-full sm:w-auto overflow-hidden rounded-full border border-blue-500/50 bg-zinc-950/60 px-8 py-6 text-base font-semibold text-zinc-100 backdrop-blur-md transition-all duration-200 hover:border-blue-500 hover:bg-blue-600 hover:text-white shadow-sm hover:shadow-lg hover:shadow-blue-950/50"
               >
                 <Link href="/assessment" className="flex items-center justify-center gap-2">
                   <span>Start Assessment</span>
-                  <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+                  <ArrowRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
                 </Link>
               </Button>
             </motion.div>
 
-            {/* Secondary CTA */}
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => handleScrollTo("features")}
-              className="w-full sm:w-auto px-8 py-6 text-base rounded-xl font-medium bg-zinc-900/50 hover:bg-zinc-800/70 text-zinc-300 border-zinc-800 backdrop-blur-md transition-colors cursor-pointer"
+            {/* Secondary CTA — Quieter resting state, same family, active hover */}
+            <motion.div
+              whileHover={shouldReduceMotion ? {} : { scale: 1.02 }}
+              whileTap={shouldReduceMotion ? {} : { scale: 0.98 }}
+              className="w-full sm:w-auto"
             >
-              Explore Platform
-            </Button>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => handleScrollTo("features")}
+                className="group relative w-full sm:w-auto overflow-hidden rounded-full border border-zinc-700/60 bg-zinc-950/40 px-8 py-6 text-base font-semibold text-zinc-300 backdrop-blur-md transition-all duration-200 hover:border-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-100 shadow-sm hover:shadow-md hover:shadow-black/40 cursor-pointer"
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <span>Explore Platform</span>
+                  <ArrowRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1 text-zinc-400 group-hover:text-zinc-200" />
+                </span>
+              </Button>
+            </motion.div>
           </motion.div>
 
           {/* Micro trust indicators */}
@@ -151,12 +154,12 @@ export function Hero() {
             className="mt-8 flex items-center justify-center gap-6 text-xs text-zinc-400"
           >
             <div className="flex items-center gap-1.5 transition-colors hover:text-zinc-200">
-              <Zap className="h-3.5 w-3.5 text-indigo-400" />
+              <Zap className="h-3.5 w-3.5 text-blue-400" />
               <span>Real-Time Ability Trajectory</span>
             </div>
             <div className="flex items-center gap-1.5 transition-colors hover:text-zinc-200">
               <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
-              <span>SIH Computer Adaptive Engine</span>
+              <span>Powered by PARAKH Engine</span>
             </div>
           </motion.div>
         </div>

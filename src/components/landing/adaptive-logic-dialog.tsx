@@ -28,7 +28,7 @@ export function AdaptiveLogicDialog({ trigger }: { trigger: ReactElement }) {
             How Adaptive Testing Works
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground leading-relaxed mt-1">
-            PARAKH adapts each question to your demonstrated ability.
+            MULYAN adapts each question to your demonstrated ability using the PARAKH CAT engine.
           </DialogDescription>
         </DialogHeader>
 

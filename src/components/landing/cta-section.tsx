@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, BrainCircuit } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
+import { MulyanLogoIcon } from "@/components/ui/mulyan-logo";
 
 export function CTASection() {
   const shouldReduceMotion = useReducedMotion();
@@ -20,8 +21,8 @@ export function CTASection() {
               transition={{ duration: 0.4 }}
               className="flex flex-col items-center"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-indigo-400 border border-zinc-700/60 mb-6 shadow-md">
-                <BrainCircuit className="h-6 w-6" />
+              <div className="mb-6 shadow-md">
+                <MulyanLogoIcon size={44} className="h-11 w-11" />
               </div>
 
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-zinc-100 tracking-tight leading-tight">
@@ -29,23 +30,23 @@ export function CTASection() {
               </h2>
 
               <p className="mt-4 text-base sm:text-lg text-zinc-400 max-w-xl font-normal leading-relaxed">
-                Explore the PARAKH student dashboard, test the visual adaptive engine trajectory, and inspect real-time proficiency breakdown.
+                Explore the MULYAN student dashboard, test the visual adaptive engine trajectory, and inspect real-time proficiency breakdown powered by the PARAKH CAT engine.
               </p>
 
               <div className="mt-8 flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
                 <motion.div
                   whileHover={shouldReduceMotion ? {} : { scale: 1.02 }}
-                  whileTap={shouldReduceMotion ? {} : { scale: 0.97 }}
+                  whileTap={shouldReduceMotion ? {} : { scale: 0.98 }}
                   className="w-full sm:w-auto"
                 >
                   <Button
                     size="lg"
                     asChild
-                    className="group w-full sm:w-auto bg-indigo-600/90 hover:bg-indigo-500 text-white border border-indigo-400/30 px-8 py-6 text-base shadow-lg shadow-indigo-950/50 rounded-xl font-semibold backdrop-blur-md transition-all"
+                    className="group relative w-full sm:w-auto overflow-hidden rounded-full border border-blue-500/50 bg-zinc-950/60 px-8 py-6 text-base font-semibold text-zinc-100 backdrop-blur-md transition-all duration-200 hover:border-blue-500 hover:bg-blue-600 hover:text-white shadow-sm hover:shadow-lg hover:shadow-blue-950/50"
                   >
                     <Link href="/dashboard" className="flex items-center justify-center gap-2">
                       <span>Launch Student Dashboard</span>
-                      <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+                      <ArrowRight className="h-5 w-5 transition-transform duration-200 group-hover:translate-x-1" />
                     </Link>
                   </Button>
                 </motion.div>
@@ -54,7 +55,7 @@ export function CTASection() {
                   variant="outline"
                   size="lg"
                   asChild
-                  className="w-full sm:w-auto px-8 py-6 text-base rounded-xl font-medium bg-zinc-800/40 hover:bg-zinc-800/70 text-zinc-300 border-zinc-700/50 backdrop-blur-md transition-colors"
+                  className="w-full sm:w-auto px-8 py-6 text-base rounded-full font-medium bg-zinc-800/40 hover:bg-zinc-800/70 text-zinc-300 border-zinc-700/50 backdrop-blur-md transition-colors"
                 >
                   <Link href="/login">Sign In</Link>
                 </Button>

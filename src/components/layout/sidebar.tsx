@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BrainCircuit,
   LayoutDashboard,
   FileCheck2,
   LineChart,
@@ -15,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
+import { MulyanLogo } from "@/components/ui/mulyan-logo";
 
 export interface NavItem {
   title: string;
@@ -88,14 +88,8 @@ export function SidebarContent() {
     <div className="flex h-full flex-col justify-between p-4 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
       <div className="space-y-6">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 px-2 py-1">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-md shadow-indigo-500/20">
-            <BrainCircuit className="h-5 w-5" />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-lg tracking-tight text-sidebar-foreground">PARAKH</span>
-            <span className="text-[10px] text-muted-foreground -mt-1 uppercase tracking-wider">Adaptive CAT Platform</span>
-          </div>
+        <Link href="/" className="flex items-center px-2 py-1 transition-opacity hover:opacity-90">
+          <MulyanLogo size="sm" />
         </Link>
 
         {/* Primary Nav */}

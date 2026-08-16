@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { BrainCircuit } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Hero } from "@/components/landing/hero";
 import { Features } from "@/components/landing/features";
 import { CTASection } from "@/components/landing/cta-section";
 import { Footer } from "@/components/layout/footer";
+import { MulyanLogo } from "@/components/ui/mulyan-logo";
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
@@ -36,18 +36,13 @@ export default function Home() {
               transition={{ duration: 0.3 }}
               className="flex items-center gap-3"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/30">
-                <BrainCircuit className="h-6 w-6 animate-pulse" />
-              </div>
-              <span className="font-extrabold text-2xl tracking-tight text-foreground">
-                PARAKH
-              </span>
+              <MulyanLogo size="lg" />
             </motion.div>
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: 100 }}
+              animate={{ width: 120 }}
               transition={{ duration: 0.5, ease: "easeInOut" }}
-              className="h-0.5 bg-indigo-600 rounded-full mt-4"
+              className="h-0.5 bg-blue-600 rounded-full mt-5"
             />
           </motion.div>
         )}

@@ -168,7 +168,7 @@ export function AdaptivePreview() {
               Adaptive Assessment Preview
             </span>
             <h4 className="text-sm font-bold text-zinc-100">
-              How PARAKH adapts to you
+              How MULYAN adapts to you
             </h4>
           </div>
         </div>

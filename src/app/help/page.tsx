@@ -33,10 +33,10 @@ export default function HelpPage() {
             </Badge>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight mt-1">
-            PARAKH Platform Architecture & Help
+            MULYAN Platform Architecture & Help
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Understanding adaptive assessment logic, ability scoring, and AI question review workflows.
+            Understanding MULYAN adaptive assessment logic, ability scoring, and PARAKH engine workflows.
           </p>
         </div>
 
