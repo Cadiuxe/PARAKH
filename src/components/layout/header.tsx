@@ -86,7 +86,7 @@ export function Header() {
 
         {/* Centered Desktop Navigation Links — Continuous Shared Glass Surface */}
         <nav
-          className="hidden md:flex items-center relative text-xs font-medium text-zinc-400 p-1"
+          className="hidden md:flex items-center relative text-xs font-medium text-zinc-400 p-0.5 gap-0.5"
           onMouseLeave={() => setHoveredNav(null)}
         >
           {/* Platform Capabilities */}
@@ -209,28 +209,28 @@ export function Header() {
         {/* Action Buttons Right */}
         <div className="flex items-center gap-2.5 shrink-0">
           {!user ? (
-            /* Glassy Sign In Button */
-            <motion.div whileTap={{ scale: 0.96 }}>
+            /* Sign In Button — unified button family (same pill, border, dark glass resting as Start Assessment) */
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 asChild
-                className="hidden sm:inline-flex bg-zinc-800/40 hover:bg-zinc-800/80 text-zinc-300 hover:text-zinc-100 border border-zinc-700/50 rounded-full px-3.5 h-8 text-xs font-medium backdrop-blur-md transition-all"
+                className="hidden sm:inline-flex group relative overflow-hidden rounded-full border border-zinc-700/60 bg-zinc-950/60 px-4 h-8 text-xs font-semibold text-zinc-300 backdrop-blur-md transition-all duration-200 hover:border-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-100 shadow-sm hover:shadow-md hover:shadow-black/50"
               >
                 <Link href="/login">Sign In</Link>
               </Button>
             </motion.div>
           ) : (
-            /* Compact Profile Dropdown Button */
+            /* Compact Profile Dropdown Button — unified styling */
             <div className="relative" ref={profileMenuRef}>
               <motion.button
                 whileTap={{ scale: 0.96 }}
                 onClick={() => setProfileOpen((prev) => !prev)}
-                className="hidden sm:inline-flex items-center gap-2 bg-zinc-800/40 hover:bg-zinc-800/80 text-zinc-300 hover:text-zinc-100 border border-zinc-700/50 rounded-full px-2.5 py-1 h-8 text-xs font-medium backdrop-blur-md transition-all focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                className="hidden sm:inline-flex items-center gap-2 bg-zinc-950/40 hover:bg-zinc-800/80 text-zinc-300 hover:text-zinc-100 border border-zinc-700/60 hover:border-zinc-500 rounded-full px-2.5 py-1 h-8 text-xs font-medium backdrop-blur-md transition-all focus:outline-none focus:ring-1 focus:ring-blue-500/50 shadow-sm"
                 aria-expanded={profileOpen}
                 aria-label="User profile menu"
               >
-                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-[10px]">
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white font-bold text-[10px]">
                   {getInitials(displayName)}
                 </div>
                 <span className="max-w-[100px] truncate text-xs font-medium text-zinc-200">
@@ -278,12 +278,12 @@ export function Header() {
             </div>
           )}
 
-          {/* Glassy Primary Start Assessment CTA — Restrained outline idle, filled brand state hover */}
-          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}>
+          {/* Primary Start Assessment CTA — Unified button family with primary brand treatment */}
+          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
             <Button
               size="sm"
               asChild
-              className="group bg-zinc-950/60 hover:bg-blue-600 text-zinc-200 hover:text-white border border-blue-500/40 hover:border-blue-500 rounded-full px-4 h-8 text-xs font-semibold shadow-sm hover:shadow-md hover:shadow-blue-950/50 backdrop-blur-md transition-all duration-200"
+              className="group relative overflow-hidden rounded-full border border-blue-500/50 bg-zinc-950/60 px-4 h-8 text-xs font-semibold text-zinc-100 backdrop-blur-md transition-all duration-200 hover:border-blue-500 hover:bg-blue-600 hover:text-white shadow-sm hover:shadow-md hover:shadow-blue-950/50"
             >
               <Link href="/dashboard" className="flex items-center gap-1.5">
                 <span>Start Assessment</span>

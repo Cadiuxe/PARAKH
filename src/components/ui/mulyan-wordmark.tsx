@@ -1,4 +1,7 @@
-import React from "react";
+"use client";
+
+import React, { useRef, useEffect, useCallback } from "react";
+import { useReducedMotion } from "motion/react";
 
 // Dot-matrix geometric definitions for MULYAN characters (12-row matrix system)
 const LETTER_DEFINITIONS = {
@@ -95,6 +98,10 @@ const DOT_RADIUS = 4.8; // radius of each circle dot
 const PADDING_X = 14;
 const PADDING_Y = 14;
 
+// Physical interaction tuning
+const REPEL_RADIUS = 85; // influence radius in viewBox pixels
+const MAX_DISPLACEMENT = 16; // peak dispersion distance
+
 interface DotCircle {
   id: string;
   cx: number;
@@ -132,20 +139,129 @@ interface MulyanWordmarkProps {
 }
 
 export function MulyanWordmark({
-  className = "w-full max-w-3xl h-auto",
+  className = "w-full max-w-5xl h-auto",
   dotColor = "#FAFAFA",
 }: MulyanWordmarkProps) {
+  const shouldReduceMotion = useReducedMotion();
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const circleRefs = useRef<(SVGCircleElement | null)[]>([]);
+
+  // Array of current offsets for physics loop
+  const offsets = useRef<{ x: number; y: number }[]>(
+    CACHED_DOTS.map(() => ({ x: 0, y: 0 }))
+  );
+  const pointerInViewBox = useRef<{ x: number; y: number }>({ x: -9999, y: -9999 });
+  const animFrameId = useRef<number | null>(null);
+  const isLoopRunning = useRef(false);
+
+  // Animation render loop
+  const renderFrame = useCallback(() => {
+    let maxOffset = 0;
+    const px = pointerInViewBox.current.x;
+    const py = pointerInViewBox.current.y;
+
+    for (let i = 0; i < CACHED_DOTS.length; i++) {
+      const dot = CACHED_DOTS[i];
+      const el = circleRefs.current[i];
+      if (!el) continue;
+
+      let targetX = 0;
+      let targetY = 0;
+
+      if (px > -1000) {
+        const dx = dot.cx - px;
+        const dy = dot.cy - py;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < REPEL_RADIUS && dist > 0.001) {
+          // Smooth quadratic falloff
+          const t = 1 - dist / REPEL_RADIUS;
+          const falloff = t * t;
+          const force = falloff * MAX_DISPLACEMENT;
+          targetX = (dx / dist) * force;
+          targetY = (dy / dist) * force;
+        }
+      }
+
+      // Fast spring-like interpolation (damping ~ 0.22)
+      offsets.current[i].x += (targetX - offsets.current[i].x) * 0.22;
+      offsets.current[i].y += (targetY - offsets.current[i].y) * 0.22;
+
+      const ox = offsets.current[i].x;
+      const oy = offsets.current[i].y;
+
+      // Update DOM directly for max 60/120fps performance
+      el.setAttribute("cx", (dot.cx + ox).toFixed(2));
+      el.setAttribute("cy", (dot.cy + oy).toFixed(2));
+
+      const displacement = Math.abs(ox) + Math.abs(oy);
+      if (displacement > maxOffset) maxOffset = displacement;
+    }
+
+    // Stop loop when settled to save CPU/battery
+    if (maxOffset < 0.04 && px < -1000) {
+      for (let i = 0; i < CACHED_DOTS.length; i++) {
+        offsets.current[i].x = 0;
+        offsets.current[i].y = 0;
+        circleRefs.current[i]?.setAttribute("cx", CACHED_DOTS[i].cx.toString());
+        circleRefs.current[i]?.setAttribute("cy", CACHED_DOTS[i].cy.toString());
+      }
+      isLoopRunning.current = false;
+      return;
+    }
+
+    animFrameId.current = requestAnimationFrame(renderFrame);
+  }, []);
+
+  const startLoop = useCallback(() => {
+    if (!isLoopRunning.current) {
+      isLoopRunning.current = true;
+      animFrameId.current = requestAnimationFrame(renderFrame);
+    }
+  }, [renderFrame]);
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (shouldReduceMotion) return;
+      const svg = svgRef.current;
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      const scaleX = VIEWBOX_WIDTH / rect.width;
+      const scaleY = VIEWBOX_HEIGHT / rect.height;
+      pointerInViewBox.current = {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY,
+      };
+      startLoop();
+    },
+    [shouldReduceMotion, startLoop]
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    pointerInViewBox.current = { x: -9999, y: -9999 };
+    startLoop();
+  }, [startLoop]);
+
+  useEffect(() => {
+    return () => {
+      if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
+    };
+  }, []);
+
   return (
     <div className="relative inline-flex items-center justify-center select-text">
       {/* Accessible text for screen readers and search engines */}
       <h1 className="sr-only">MULYAN</h1>
 
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className={className}
+        className={`${className} cursor-pointer`}
         aria-hidden="true"
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
       >
         <defs>
           <filter id="mulyan-dot-glow" x="-20%" y="-20%" width="140%" height="140%">
@@ -153,9 +269,12 @@ export function MulyanWordmark({
           </filter>
         </defs>
         <g filter="url(#mulyan-dot-glow)">
-          {CACHED_DOTS.map((dot) => (
+          {CACHED_DOTS.map((dot, idx) => (
             <circle
               key={dot.id}
+              ref={(el) => {
+                circleRefs.current[idx] = el;
+              }}
               cx={dot.cx}
               cy={dot.cy}
               r={DOT_RADIUS}

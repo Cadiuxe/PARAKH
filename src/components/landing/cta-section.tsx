@@ -51,14 +51,20 @@ export function CTASection() {
                   </Button>
                 </motion.div>
 
-                <Button
-                  variant="outline"
-                  size="lg"
-                  asChild
-                  className="w-full sm:w-auto px-8 py-6 text-base rounded-full font-medium bg-zinc-800/40 hover:bg-zinc-800/70 text-zinc-300 border-zinc-700/50 backdrop-blur-md transition-colors"
+                <motion.div
+                  whileHover={shouldReduceMotion ? {} : { scale: 1.02 }}
+                  whileTap={shouldReduceMotion ? {} : { scale: 0.98 }}
+                  className="w-full sm:w-auto"
                 >
-                  <Link href="/login">Sign In</Link>
-                </Button>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    asChild
+                    className="group relative w-full sm:w-auto overflow-hidden rounded-full border border-zinc-700/60 bg-zinc-950/60 px-8 py-6 text-base font-semibold text-zinc-300 backdrop-blur-md transition-all duration-200 hover:border-zinc-500 hover:bg-zinc-800/80 hover:text-zinc-100 shadow-sm hover:shadow-lg hover:shadow-black/50"
+                  >
+                    <Link href="/login">Sign In</Link>
+                  </Button>
+                </motion.div>
               </div>
             </motion.div>
           </div>
