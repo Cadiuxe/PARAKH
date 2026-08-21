@@ -38,7 +38,10 @@ import {
 } from "@/lib/assessment-storage";
 import {
   startAssessmentSession,
+  checkTopicCalibration,
   getDiagnosticQuiz,
+  evaluateDiagnosticAnswer,
+  evaluateDiagnosticCalibration,
   startAssessmentWithDiagnostic,
   submitQuestionAnswer,
   getActiveAssessmentSession,
@@ -56,6 +59,7 @@ type Phase =
   | "diagnostic_self"
   | "diagnostic_quiz"
   | "diagnostic_calibrating"
+  | "diagnostic_result"
   | "question"
   | "complete";
 
@@ -331,6 +335,12 @@ function SelfAssessmentScreen({
 
 // ─── Pre-Assessment: 5 Diagnostic Questions Screen ───────────────────────────
 
+interface DiagnosticFeedbackState {
+  isCorrect: boolean;
+  correctOptionIndex: number;
+  explanation: string;
+}
+
 function DiagnosticQuizScreen({
   questions,
   currentIndex,
@@ -344,13 +354,54 @@ function DiagnosticQuizScreen({
 }) {
   const currentQ = questions[currentIndex];
   const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
+  const [feedback, setFeedback] = useState<DiagnosticFeedbackState | null>(null);
+  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
 
+  // Reset local state when moving to a new diagnostic question
   useEffect(() => {
     setSelectedOpt(null);
-  }, [currentIndex]);
+    setFeedback(null);
+    setIsEvaluating(false);
+  }, [currentIndex, currentQ?.id]);
 
-  const handleNext = () => {
-    if (selectedOpt === null || !currentQ) return;
+  const handleSelectOption = async (optIdx: number) => {
+    if (selectedOpt !== null || isEvaluating || feedback !== null || !currentQ) return;
+    setSelectedOpt(optIdx);
+    setIsEvaluating(true);
+
+    try {
+      const res = await evaluateDiagnosticAnswer({
+        questionId: currentQ.id,
+        selectedOptionIndex: optIdx,
+      });
+
+      if (res.success) {
+        setFeedback({
+          isCorrect: res.isCorrect,
+          correctOptionIndex: res.correctOptionIndex,
+          explanation: res.explanation,
+        });
+      } else {
+        // In case of evaluation error, allow proceeding
+        setFeedback({
+          isCorrect: false,
+          correctOptionIndex: optIdx,
+          explanation: "Answer recorded.",
+        });
+      }
+    } catch {
+      setFeedback({
+        isCorrect: false,
+        correctOptionIndex: optIdx,
+        explanation: "Answer recorded.",
+      });
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  const handleProceedNext = () => {
+    if (selectedOpt === null || !currentQ || isCalibrating) return;
     onAnswer(currentQ.id, selectedOpt);
   };
 
@@ -392,53 +443,139 @@ function DiagnosticQuizScreen({
 
         {/* Options */}
         <div className="space-y-2.5">
-          {currentQ.options.map((opt, idx) => (
-            <button
-              key={idx}
-              disabled={isCalibrating}
-              onClick={() => setSelectedOpt(idx)}
-              className={`w-full text-left p-3.5 rounded-xl border text-sm transition-all flex items-center gap-3 ${
-                selectedOpt === idx
-                  ? "bg-indigo-600/20 border-indigo-500 text-foreground ring-1 ring-indigo-500/50 shadow-sm"
-                  : "border-border/60 hover:border-indigo-500/40 bg-muted/20 text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <span
-                className={`h-6 w-6 rounded-lg text-xs font-bold flex items-center justify-center border shrink-0 ${
-                  selectedOpt === idx
-                    ? "bg-indigo-600 border-indigo-500 text-white"
-                    : "border-border bg-background text-muted-foreground"
-                }`}
+          {currentQ.options.map((opt, idx) => {
+            const isSelected = selectedOpt === idx;
+            const isAnswered = feedback !== null;
+            const isCorrectOption = isAnswered && feedback.correctOptionIndex === idx;
+            const isIncorrectSelected = isAnswered && isSelected && !feedback.isCorrect;
+
+            let optionStyle = "border-border/60 hover:border-indigo-500/40 bg-muted/20 text-muted-foreground hover:text-foreground";
+            let badgeStyle = "border-border bg-background text-muted-foreground";
+
+            if (isAnswered) {
+              if (isCorrectOption) {
+                optionStyle = "bg-emerald-500/15 border-emerald-500/70 text-foreground ring-1 ring-emerald-500/30 shadow-sm";
+                badgeStyle = "bg-emerald-600 border-emerald-500 text-white";
+              } else if (isIncorrectSelected) {
+                optionStyle = "bg-red-500/15 border-red-500/70 text-foreground ring-1 ring-red-500/30 shadow-sm";
+                badgeStyle = "bg-red-600 border-red-500 text-white";
+              } else {
+                optionStyle = "border-border/40 bg-muted/10 text-muted-foreground/60 opacity-60";
+              }
+            } else if (isSelected) {
+              if (isEvaluating) {
+                optionStyle = "bg-indigo-600/20 border-indigo-500 text-foreground ring-1 ring-indigo-500/50 shadow-sm cursor-wait";
+                badgeStyle = "bg-indigo-600 border-indigo-500 text-white";
+              } else {
+                optionStyle = "bg-indigo-600/20 border-indigo-500 text-foreground ring-1 ring-indigo-500/50 shadow-sm";
+                badgeStyle = "bg-indigo-600 border-indigo-500 text-white";
+              }
+            } else if (isEvaluating) {
+              optionStyle = "border-border/40 bg-muted/10 text-muted-foreground/50 opacity-60 cursor-not-allowed";
+            }
+
+            return (
+              <button
+                key={idx}
+                disabled={isAnswered || isEvaluating || isCalibrating}
+                onClick={() => handleSelectOption(idx)}
+                className={`w-full text-left p-3.5 rounded-xl border text-sm transition-all flex items-center gap-3 ${optionStyle}`}
               >
-                {String.fromCharCode(65 + idx)}
-              </span>
-              <span className="leading-snug">{opt}</span>
-            </button>
-          ))}
+                <span
+                  className={`h-6 w-6 rounded-lg text-xs font-bold flex items-center justify-center border shrink-0 ${badgeStyle}`}
+                >
+                  {isAnswered && isCorrectOption ? (
+                    <CheckCircle2 className="h-4 w-4 text-white" />
+                  ) : isAnswered && isIncorrectSelected ? (
+                    <XCircle className="h-4 w-4 text-white" />
+                  ) : isEvaluating && isSelected ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
+                  ) : (
+                    String.fromCharCode(65 + idx)
+                  )}
+                </span>
+                <span className="leading-snug flex-1">{opt}</span>
+                {isEvaluating && isSelected && (
+                  <span className="text-xs font-medium text-indigo-400 shrink-0 flex items-center gap-1 animate-pulse">
+                    Verifying…
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
-        <Button
-          onClick={handleNext}
-          disabled={selectedOpt === null || isCalibrating}
-          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-11 text-sm shadow-md shadow-indigo-600/20 gap-2"
-        >
-          {isCalibrating ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Calibrating Starting Ability…
-            </>
-          ) : currentIndex === 4 ? (
-            <>
-              <CheckCircle2 className="h-4 w-4" />
-              Complete Diagnostic &amp; Start Test
-            </>
-          ) : (
-            <>
-              <span>Next Diagnostic Question</span>
-              <ArrowRight className="h-4 w-4" />
-            </>
-          )}
-        </Button>
+        {/* Server Authoritative Diagnostic Feedback & Explanation */}
+        {feedback && (
+          <div
+            className={`rounded-xl border p-4 space-y-2 text-xs transition-all animate-in fade-in-50 duration-200 ${
+              feedback.isCorrect
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                : "bg-red-500/10 border-red-500/30 text-red-400"
+            }`}
+          >
+            <div className="flex items-center gap-2 font-semibold text-sm">
+              {feedback.isCorrect ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  <span>Correct Answer</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-4 w-4 shrink-0 text-red-400" />
+                  <span>
+                    Incorrect · Correct:{" "}
+                    <span className="font-bold underline text-foreground">
+                      {currentQ.options[feedback.correctOptionIndex]}
+                    </span>
+                  </span>
+                </>
+              )}
+            </div>
+            {feedback.explanation && (
+              <p className="text-muted-foreground text-xs leading-relaxed pt-1 border-t border-border/40">
+                {feedback.explanation}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Next / Proceed Button */}
+        {feedback ? (
+          <Button
+            onClick={handleProceedNext}
+            disabled={isCalibrating}
+            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-11 text-sm shadow-md shadow-indigo-600/20 gap-2"
+          >
+            {isCalibrating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Calibrating Starting Ability…
+              </>
+            ) : currentIndex === 4 ? (
+              <>
+                <CheckCircle2 className="h-4 w-4" />
+                Proceed to Calibration
+              </>
+            ) : (
+              <>
+                <span>Next Diagnostic Question</span>
+                <ArrowRight className="h-4 w-4" />
+              </>
+            )}
+          </Button>
+        ) : (
+          <div className="text-center text-xs text-muted-foreground py-1">
+            {isEvaluating ? (
+              <span className="inline-flex items-center gap-2 text-indigo-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Evaluating answer...
+              </span>
+            ) : (
+              "Select an answer above to see explanation and proceed"
+            )}
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -459,6 +596,109 @@ function CalibratingScreen() {
         </p>
       </div>
       <Loader2 className="h-6 w-6 animate-spin mx-auto text-indigo-400" />
+    </div>
+  );
+}
+
+// ─── Pre-Assessment: Calibration Result Screen ───────────────────────────────
+
+function abilityLabel(ability: number): { label: string; description: string; color: string } {
+  if (ability < 25) return { label: "Beginner", description: "We'll start with foundational concepts to build your confidence.", color: "text-sky-400" };
+  if (ability < 40) return { label: "Elementary", description: "You have some basics — we'll strengthen your fundamentals first.", color: "text-blue-400" };
+  if (ability < 55) return { label: "Intermediate", description: "A solid foundation — expect a balanced mix of concepts and problem-solving.", color: "text-indigo-400" };
+  if (ability < 70) return { label: "Proficient", description: "You have strong conceptual knowledge — questions will challenge your depth.", color: "text-violet-400" };
+  if (ability < 83) return { label: "Advanced", description: "High proficiency detected — expect nuanced and complex questions.", color: "text-amber-400" };
+  return { label: "Expert", description: "Exceptional baseline — the assessment will start at the most challenging tier.", color: "text-emerald-400" };
+}
+
+function DiagnosticResultScreen({
+  ability,
+  onBegin,
+  isLoading,
+  error,
+}: {
+  ability: number;
+  onBegin: () => void;
+  isLoading?: boolean;
+  error?: string | null;
+}) {
+  const { label, description, color } = abilityLabel(ability);
+
+  return (
+    <div className="max-w-lg mx-auto space-y-6 py-4">
+      <div className="text-center space-y-2">
+        <Badge className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+          Calibration Complete
+        </Badge>
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+          Your Starting Level
+        </h1>
+        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+          Based on your diagnostic responses, the adaptive engine has estimated your baseline ability.
+        </p>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-400 flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <Card className="p-8 border border-border/80 bg-card shadow-md text-center space-y-5">
+        {/* Ability icon */}
+        <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 mx-auto">
+          <TrendingUp className="h-8 w-8" />
+        </div>
+
+        {/* Numerical Starting Ability & Level Label */}
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-muted/50 border border-border/60">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Starting Ability:
+            </span>
+            <span className="text-sm font-bold text-foreground font-mono">
+              {ability.toFixed(1)} / 100
+            </span>
+          </div>
+          <div>
+            <p className={`text-3xl font-extrabold tracking-tight ${color}`}>{label}</p>
+            <p className="text-sm text-muted-foreground max-w-xs mx-auto leading-relaxed mt-1">
+              {description}
+            </p>
+          </div>
+        </div>
+
+        {/* Decorative visual bar — relative width only */}
+        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full bg-indigo-500 transition-all"
+            style={{ width: `${Math.round(Math.max(8, Math.min(100, ability)))}%` }}
+          />
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          Questions will adapt in real-time as you answer.
+        </p>
+
+        <Button
+          onClick={onBegin}
+          disabled={isLoading}
+          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-11 text-sm shadow-lg shadow-indigo-600/20 gap-2"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Starting Assessment…
+            </>
+          ) : (
+            <>
+              <Play className="h-4 w-4 fill-current" />
+              Begin Assessment
+            </>
+          )}
+        </Button>
+      </Card>
     </div>
   );
 }
@@ -497,7 +737,7 @@ function QuestionScreen({
 
   // Countdown timer
   useEffect(() => {
-    if (serverFeedback !== null) return;
+    if (serverFeedback !== null || isSubmitting) return;
     if (timeLeft <= 0) {
       if (!autoSubmittedRef.current) {
         autoSubmittedRef.current = true;
@@ -508,7 +748,7 @@ function QuestionScreen({
     }
     const id = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
     return () => clearTimeout(id);
-  }, [timeLeft, serverFeedback, onSubmitAnswer]);
+  }, [timeLeft, serverFeedback, isSubmitting, onSubmitAnswer]);
 
   const timerPct = (timeLeft / TIMER_SECONDS) * 100;
   const progress = ((questionIndex) / totalQuestions) * 100;
@@ -580,10 +820,18 @@ function QuestionScreen({
             let cls =
               "w-full text-left p-3.5 rounded-xl border text-sm font-medium transition-all ";
             if (!isSubmitted) {
-              cls +=
-                selected === idx
-                  ? "border-indigo-500 bg-indigo-500/10 text-foreground cursor-pointer"
-                  : "border-border/60 bg-muted/20 text-muted-foreground hover:border-indigo-500/50 hover:text-foreground hover:bg-muted/40 cursor-pointer";
+              if (isSubmitting) {
+                if (selected === idx) {
+                  cls += "border-indigo-500 bg-indigo-500/20 text-foreground ring-1 ring-indigo-500/50 shadow-sm cursor-wait";
+                } else {
+                  cls += "border-border/30 bg-muted/10 text-muted-foreground/40 opacity-50 cursor-not-allowed";
+                }
+              } else {
+                cls +=
+                  selected === idx
+                    ? "border-indigo-500 bg-indigo-500/10 text-foreground cursor-pointer"
+                    : "border-border/60 bg-muted/20 text-muted-foreground hover:border-indigo-500/50 hover:text-foreground hover:bg-muted/40 cursor-pointer";
+              }
             } else {
               if (idx === serverFeedback.correctOptionIndex) {
                 cls += "border-emerald-500 bg-emerald-500/10 text-emerald-300";
@@ -603,9 +851,19 @@ function QuestionScreen({
               >
                 <div className="flex items-start gap-3">
                   <span className="shrink-0 flex h-6 w-6 items-center justify-center rounded-md border border-current text-xs font-bold">
-                    {String.fromCharCode(65 + idx)}
+                    {isSubmitting && selected === idx ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+                    ) : (
+                      String.fromCharCode(65 + idx)
+                    )}
                   </span>
                   <span className="leading-snug">{option}</span>
+                  {isSubmitting && selected === idx && (
+                    <span className="ml-auto text-xs font-semibold text-indigo-400 shrink-0 flex items-center gap-1.5 animate-pulse">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Verifying…
+                    </span>
+                  )}
                   {isSubmitted && idx === serverFeedback.correctOptionIndex && (
                     <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
                   )}
@@ -968,6 +1226,8 @@ export default function AssessmentPage() {
   const [diagnosticAnswers, setDiagnosticAnswers] = useState<
     Array<{ questionId: string; selectedOptionIndex: number }>
   >([]);
+  // Stores the calculated calibrated ability prior to present to the user before session creation
+  const [calibratedAbility, setCalibratedAbility] = useState<number>(INITIAL_ABILITY);
 
   // 1. On Mount: Check for active assessment session to resume upon refresh/reconnect
   useEffect(() => {
@@ -998,12 +1258,38 @@ export default function AssessmentPage() {
     };
   }, []);
 
-  // 2. Start Assessment Setup -> Pre-Assessment
+  // 2. Start Assessment Setup -> Pre-Assessment (or skip if returning student)
   const handleStart = async (topic: string, count: number) => {
     setIsStarting(true);
     setErrorMsg(null);
 
     try {
+      // Check whether this student already has a calibrated ability for this topic.
+      // ability_estimates has a row iff the student completed at least one session for this topic.
+      const calibCheck = await checkTopicCalibration(topic);
+
+      if (calibCheck.isCalibrated) {
+        // Returning student: skip pre-assessment entirely; server authoritatively uses persisted topic ability
+        const res = await startAssessmentSession(topic, count);
+        if (res.success) {
+          setSessionId(res.sessionId);
+          setSelectedTopic(res.topic);
+          setTotalCount(res.requestedCount);
+          setAbility(res.initialAbility);
+          setAbilityStart(res.initialAbility);
+          setQuestionIndex(0);
+          setCurrentQuestion(mapSafeToView(res.firstQuestion));
+          setNextQuestionBuffered(null);
+          setServerFeedback(null);
+          setCompletedSummary(null);
+          setPhase("question");
+        } else {
+          setErrorMsg(res.error || "Failed to start assessment.");
+        }
+        return;
+      }
+
+      // First-time student (or Mixed): run the pre-assessment diagnostic
       const diagRes = await getDiagnosticQuiz(topic);
       if (diagRes.success && diagRes.questions.length >= 5) {
         setDiagnosticQuestions(diagRes.questions.map(mapSafeToView));
@@ -1014,7 +1300,7 @@ export default function AssessmentPage() {
         setSelfAssessmentTier(null);
         setPhase("diagnostic_self");
       } else {
-        // Fallback directly to adaptive session if diagnostic quiz fails
+        // Fallback: diagnostic quiz unavailable, start directly
         const res = await startAssessmentSession(topic, count);
         if (res.success) {
           setSessionId(res.sessionId);
@@ -1061,28 +1347,18 @@ export default function AssessmentPage() {
     if (diagnosticIndex < 4) {
       setDiagnosticIndex(diagnosticIndex + 1);
     } else {
-      // Finished 5th diagnostic question -> Calibrate on server
+      // Finished 5th diagnostic question -> Evaluate ability prior on server WITHOUT creating a session
       setPhase("diagnostic_calibrating");
       try {
-        const res = await startAssessmentWithDiagnostic({
+        const res = await evaluateDiagnosticCalibration({
           topic: pendingTopic,
-          count: pendingCount,
           selfAssessmentTier,
           diagnosticAnswers: updatedAnswers,
         });
 
         if (res.success) {
-          setSessionId(res.sessionId);
-          setSelectedTopic(res.topic);
-          setTotalCount(res.requestedCount);
-          setAbility(res.initialAbility);
-          setAbilityStart(res.initialAbility);
-          setQuestionIndex(0);
-          setCurrentQuestion(mapSafeToView(res.firstQuestion));
-          setNextQuestionBuffered(null);
-          setServerFeedback(null);
-          setCompletedSummary(null);
-          setPhase("question");
+          setCalibratedAbility(res.calibratedAbility);
+          setPhase("diagnostic_result");
         } else {
           setErrorMsg(res.error || "Calibration failed.");
           setPhase("setup");
@@ -1091,6 +1367,42 @@ export default function AssessmentPage() {
         setErrorMsg(err?.message || "Calibration failed.");
         setPhase("setup");
       }
+    }
+  };
+
+  // Pre-Assessment Step 3: User clicks "Begin Assessment" on the calibration result screen
+  // This is the single place where the main in_progress session is created for calibrated assessments
+  const handleBeginCalibratedAssessment = async () => {
+    setIsStarting(true);
+    setErrorMsg(null);
+
+    try {
+      const res = await startAssessmentWithDiagnostic({
+        topic: pendingTopic,
+        count: pendingCount,
+        selfAssessmentTier,
+        diagnosticAnswers,
+      });
+
+      if (res.success) {
+        setSessionId(res.sessionId);
+        setSelectedTopic(res.topic);
+        setTotalCount(res.requestedCount);
+        setAbility(res.initialAbility);
+        setAbilityStart(res.initialAbility);
+        setQuestionIndex(0);
+        setCurrentQuestion(mapSafeToView(res.firstQuestion));
+        setNextQuestionBuffered(null);
+        setServerFeedback(null);
+        setCompletedSummary(null);
+        setPhase("question");
+      } else {
+        setErrorMsg(res.error || "Failed to initialize assessment session.");
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || "An unexpected error occurred.");
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -1211,6 +1523,7 @@ export default function AssessmentPage() {
     setDiagnosticAnswers([]);
     setDiagnosticIndex(0);
     setSelfAssessmentTier(null);
+    setCalibratedAbility(INITIAL_ABILITY);
     setErrorMsg(null);
   };
 
@@ -1226,6 +1539,34 @@ export default function AssessmentPage() {
       {phase === "setup" && (
         <SetupScreen
           onStart={handleStart}
+          isLoading={isStarting}
+          error={errorMsg}
+        />
+      )}
+
+      {phase === "diagnostic_self" && (
+        <SelfAssessmentScreen
+          topic={pendingTopic}
+          onProceed={handleSelfAssessmentProceed}
+          onSkip={handleSelfAssessmentSkip}
+        />
+      )}
+
+      {phase === "diagnostic_quiz" && (
+        <DiagnosticQuizScreen
+          questions={diagnosticQuestions}
+          currentIndex={diagnosticIndex}
+          onAnswer={handleDiagnosticAnswer}
+          isCalibrating={false}
+        />
+      )}
+
+      {phase === "diagnostic_calibrating" && <CalibratingScreen />}
+
+      {phase === "diagnostic_result" && (
+        <DiagnosticResultScreen
+          ability={calibratedAbility}
+          onBegin={handleBeginCalibratedAssessment}
           isLoading={isStarting}
           error={errorMsg}
         />

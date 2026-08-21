@@ -9,7 +9,7 @@
  * Client components receive ONLY QuestionSafeRow (no answer key or explanation before submission).
  */
 
-import { getSupabaseAdmin } from "./server-client";
+import { getSupabaseAdmin, isSupabaseServerConfigured } from "./server-client";
 import type { QuestionRow, QuestionSafeRow } from "./types";
 import { QUESTION_BANK, AssessmentQuestion, getDifficultyScoreFromLevel } from "../mock-data";
 
@@ -69,6 +69,11 @@ export function toSafeQuestion(
   };
 }
 
+// In-memory cache for approved assessment questions to avoid redundant DB roundtrips
+let cachedQuestions: AssessmentQuestion[] | null = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache TTL
+
 /**
  * Fetch all approved, active questions for the adaptive engine.
  * Optionally filter by topic code (e.g., 'DSA', 'DBMS').
@@ -81,42 +86,67 @@ export function toSafeQuestion(
 export async function fetchApprovedQuestions(
   topicCode?: string
 ): Promise<AssessmentQuestion[]> {
-  try {
-    const admin = getSupabaseAdmin();
-    let query = admin
-      .from("questions")
-      .select("*, topics!inner(code)")
-      .eq("is_active", true)
-      .eq("review_status", "approved");
+  const now = Date.now();
 
-    if (topicCode && topicCode !== "Mixed") {
-      query = query.eq("topics.code", topicCode);
-    }
-
-    const { data, error } = await query;
-
-    if (!error && data && data.length > 0) {
-      return data.map((row: any) => ({
-        id: row.id,
-        topic: row.topics?.code || topicCode || "Mixed",
-        subtopic: row.subtopic,
-        difficultyLabel: row.difficulty_label,
-        difficultyLevel: row.difficulty_level,
-        difficultyScore:
-          row.difficulty_score != null
-            ? Number(row.difficulty_score)
-            : getDifficultyScoreFromLevel(row.difficulty_level),
-        questionText: row.question_text,
-        options: row.options as string[],
-        correctOptionIndex: row.correct_option_index,
-        explanation: row.explanation || "",
-      }));
-    }
-  } catch {
-    // Supabase unconfigured or DB offline: fallback gracefully to curated QUESTION_BANK
+  // Return from in-memory cache if fresh
+  if (cachedQuestions && (now - lastCacheTime < CACHE_TTL_MS)) {
+    return cachedQuestions.filter((q) => {
+      if (topicCode && topicCode !== "Mixed" && q.topic !== topicCode) return false;
+      return true;
+    });
   }
 
-  // Fallback to memory question bank
+  if (isSupabaseServerConfigured()) {
+    try {
+      const admin = getSupabaseAdmin();
+      const { data, error } = await admin
+        .from("questions")
+        .select("*")
+        .eq("is_active", true)
+        .eq("review_status", "approved");
+
+      if (error) {
+        console.error("[fetchApprovedQuestions] Supabase error (falling back to QUESTION_BANK):", error.message);
+      } else if (data && data.length > 0) {
+        // Resolve topic UUIDs → codes via in-memory cache (avoids DB join)
+        const { getTopicCodeById } = await import("./topics");
+        const mapped: AssessmentQuestion[] = await Promise.all(
+          data.map(async (row: any) => ({
+            id: row.id,
+            topic: (await getTopicCodeById(row.topic_id)) || "Mixed",
+            subtopic: row.subtopic,
+            difficultyLabel: row.difficulty_label,
+            difficultyLevel: row.difficulty_level,
+            difficultyScore:
+              row.difficulty_score != null
+                ? Number(row.difficulty_score)
+                : getDifficultyScoreFromLevel(row.difficulty_level),
+            questionText: row.question_text,
+            options: row.options as string[],
+            correctOptionIndex: row.correct_option_index,
+            explanation: row.explanation || "",
+          }))
+        );
+
+        cachedQuestions = mapped;
+        lastCacheTime = now;
+
+        return cachedQuestions.filter((q) => {
+          if (topicCode && topicCode !== "Mixed" && q.topic !== topicCode) return false;
+          return true;
+        });
+      } else {
+        console.warn("[fetchApprovedQuestions] No questions returned from Supabase, falling back to QUESTION_BANK");
+      }
+    } catch (err: any) {
+      console.error("[fetchApprovedQuestions] Unexpected error (falling back to QUESTION_BANK):", err?.message);
+    }
+  }
+
+  // Fallback: Supabase not configured, returned 0 rows, or query failed
+  cachedQuestions = QUESTION_BANK;
+  lastCacheTime = now;
+
   return QUESTION_BANK.filter((q) => {
     if (topicCode && topicCode !== "Mixed" && q.topic !== topicCode) return false;
     return true;
@@ -130,37 +160,20 @@ export async function fetchApprovedQuestions(
 export async function fetchQuestionById(
   questionId: string
 ): Promise<AssessmentQuestion | null> {
-  try {
-    const admin = getSupabaseAdmin();
-    const { data, error } = await admin
-      .from("questions")
-      .select("*, topics(code)")
-      .eq("id", questionId)
-      .single();
-
-    if (!error && data) {
-      return {
-        id: data.id,
-        topic: (data as any).topics?.code || "Mixed",
-        subtopic: data.subtopic,
-        difficultyLabel: data.difficulty_label,
-        difficultyLevel: data.difficulty_level,
-        difficultyScore:
-          data.difficulty_score != null
-            ? Number(data.difficulty_score)
-            : getDifficultyScoreFromLevel(data.difficulty_level),
-        questionText: data.question_text,
-        options: data.options as string[],
-        correctOptionIndex: data.correct_option_index,
-        explanation: data.explanation || "",
-      };
-    }
-  } catch {
-    // Fallback to local memory bank
+  // 1. Check cache first for sub-millisecond lookup
+  if (cachedQuestions) {
+    const found = cachedQuestions.find((q) => q.id === questionId);
+    if (found) return found;
   }
 
-  const found = QUESTION_BANK.find((q) => q.id === questionId);
-  return found || null;
+  // 2. Populate cache if not loaded
+  const all = await fetchApprovedQuestions();
+  const match = all.find((q) => q.id === questionId);
+  if (match) return match;
+
+  // 3. Fallback check
+  const fallback = QUESTION_BANK.find((q) => q.id === questionId);
+  return fallback || null;
 }
 
 /**

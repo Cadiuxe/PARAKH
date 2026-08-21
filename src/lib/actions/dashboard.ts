@@ -21,7 +21,7 @@
 
 import { getAuthenticatedStudent } from "./assessment";
 import { getStudentSessions } from "@/lib/db/sessions";
-import { getSessionResponses } from "@/lib/db/responses";
+import { getResponsesForSessions } from "@/lib/db/responses";
 import { getAbilityLevelLabel } from "@/lib/assessment-storage";
 
 // ---------------------------------------------------------------------------
@@ -209,8 +209,8 @@ export async function getStudentDashboardData(): Promise<StudentDashboardData> {
   const student = await getAuthenticatedStudent();
   if (!student) return EMPTY_STATE(null);
 
-  // 1. Fetch ALL completed sessions — large limit to avoid silently capping.
-  const allSessions = await getStudentSessions(student.id, 10_000);
+  // 1. Fetch completed sessions — capped at 200 (more than enough for this prototype)
+  const allSessions = await getStudentSessions(student.id, 200);
   if (!allSessions || allSessions.length === 0) return EMPTY_STATE(student.id);
 
   // 2. Map all sessions to summary objects (newest-first from DB).
@@ -230,7 +230,7 @@ export async function getStudentDashboardData(): Promise<StudentDashboardData> {
   // 3. Slice the display list (newest-first, capped for the card UI).
   const recentSessions = allSessionSummaries.slice(0, RECENT_DISPLAY_LIMIT);
 
-  // 4. Accumulate lifetime topic stats from ALL sessions.
+  // 4. Accumulate lifetime topic stats from ALL sessions in parallel
   const topicStats: Record<string, { total: number; correct: number; abilitySum: number }> = {
     DSA: { total: 0, correct: 0, abilitySum: 0 },
     OS: { total: 0, correct: 0, abilitySum: 0 },
@@ -238,8 +238,12 @@ export async function getStudentDashboardData(): Promise<StudentDashboardData> {
     CN: { total: 0, correct: 0, abilitySum: 0 },
   };
 
-  for (const s of allSessions) {
-    const sessionResponses = await getSessionResponses(s.id);
+  // 4. Batch-fetch ALL responses for ALL sessions in a single Supabase query
+  const sessionIds = allSessions.map((s) => s.id);
+  const responsesBySession = await getResponsesForSessions(sessionIds);
+  const sessionResponsesList = allSessions.map((s) => responsesBySession.get(s.id) || []);
+
+  for (const sessionResponses of sessionResponsesList) {
     for (const resp of sessionResponses) {
       const code = resp.topic_code;
       if (topicStats[code]) {
@@ -305,8 +309,8 @@ export async function getStudentDashboardData(): Promise<StudentDashboardData> {
   let chartSubtitle = "Real ability progression derived from completed sessions.";
 
   if (totalSessions === 1 && allSessions[0]) {
-    // 1 session: question-by-question progression.
-    const singleSessionResponses = await getSessionResponses(allSessions[0].id);
+    // 1 session: question-by-question progression using already fetched responses
+    const singleSessionResponses = sessionResponsesList[0] || [];
     chartSubtitle = `Question-by-question ability trajectory for latest ${allSessions[0].topic_filter} session.`;
     chartData = singleSessionResponses.map((r, idx) => ({
       label: `Q${idx + 1}`,

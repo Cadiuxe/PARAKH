@@ -20,8 +20,17 @@ import type { Database } from "./types";
 let _adminClient: SupabaseClient<Database> | null = null;
 
 /**
+ * Check if the Supabase server client environment variables are genuinely configured.
+ */
+export function isSupabaseServerConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+}
+
+/**
  * Returns the server-side Supabase admin client (singleton).
- * Uses the service-role key — bypasses RLS for trusted server-side operations.
+ * Strictly requires SUPABASE_SERVICE_ROLE_KEY — bypasses RLS for trusted server-side operations.
  * Throws at call-time if environment variables are not configured.
  */
 export function getSupabaseAdmin(): SupabaseClient<Database> {
@@ -32,7 +41,7 @@ export function getSupabaseAdmin(): SupabaseClient<Database> {
 
   if (!supabaseUrl || !supabaseServiceRoleKey) {
     throw new Error(
-      "[PARAKH] Supabase server client is not configured.\n" +
+      "[PARAKH] Supabase server admin client is not configured.\n" +
         "Set in .env.local:\n" +
         "  NEXT_PUBLIC_SUPABASE_URL\n" +
         "  SUPABASE_SERVICE_ROLE_KEY\n" +

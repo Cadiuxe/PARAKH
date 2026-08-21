@@ -5,14 +5,19 @@
  * Import only in Server Actions, API routes, or server components — never in client components.
  */
 
-import { getSupabaseAdmin } from "./server-client";
+import { getSupabaseAdmin, isSupabaseServerConfigured } from "./server-client";
 import type { ResponseRow, ResponseInsert } from "./types";
 
 /**
- * In-memory fallback responses store for development or environments
- * when Supabase database is unreachable.
+ * In-memory fallback responses store for development or demo environments
+ * when Supabase database is genuinely not configured.
  */
 const inMemoryResponses = new Map<string, ResponseRow[]>();
+
+function isValidUUID(str?: string): boolean {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
 
 /**
  * Insert a single response record for an assessment question attempt.
@@ -23,7 +28,7 @@ const inMemoryResponses = new Map<string, ResponseRow[]>();
 export async function insertResponse(
   response: ResponseInsert
 ): Promise<ResponseRow> {
-  const responseId = `resp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const responseId = crypto.randomUUID();
   const now = new Date().toISOString();
 
   const newRow: ResponseRow = {
@@ -46,7 +51,17 @@ export async function insertResponse(
     answered_at: now,
   };
 
-  try {
+  // Check if session belongs to in-memory store
+  const { getSessionById } = await import("./sessions");
+  const memSession = await getSessionById(response.session_id);
+  const isInMemorySession = !memSession || !isValidUUID(memSession.student_id);
+
+  if (
+    isSupabaseServerConfigured() &&
+    !isInMemorySession &&
+    isValidUUID(response.session_id) &&
+    isValidUUID(response.question_id)
+  ) {
     const admin = getSupabaseAdmin();
     const { data: inserted, error } = await admin
       .from("responses")
@@ -54,13 +69,15 @@ export async function insertResponse(
       .select()
       .single();
 
-    if (!error && inserted) {
-      return inserted as ResponseRow;
+    if (error) {
+      console.error("[insertResponse] Supabase database error:", error.message);
+      throw new Error(`Failed to insert question response: ${error.message}`);
     }
-  } catch {
-    // Database fallback to memory store
+
+    return inserted as ResponseRow;
   }
 
+  // Explicit demo mode
   const existing = inMemoryResponses.get(response.session_id) || [];
   inMemoryResponses.set(response.session_id, [...existing, newRow]);
   return newRow;
@@ -93,7 +110,7 @@ export async function getSessionResponses(
   sessionId: string,
   studentId?: string
 ): Promise<ResponseRow[]> {
-  try {
+  if (isSupabaseServerConfigured() && isValidUUID(sessionId)) {
     const admin = getSupabaseAdmin();
     const { data, error } = await admin
       .from("responses")
@@ -101,13 +118,62 @@ export async function getSessionResponses(
       .eq("session_id", sessionId)
       .order("question_order", { ascending: true });
 
-    if (!error && data) {
+    if (error) {
+      console.error("[getSessionResponses] Supabase database error:", error.message);
+      throw new Error(`Failed to fetch session responses: ${error.message}`);
+    }
+
+    if (data && data.length > 0) {
       return data as ResponseRow[];
     }
-  } catch {
-    // Fallback
   }
 
+  // Explicit demo mode / in-memory session
   const list = inMemoryResponses.get(sessionId) || [];
   return [...list].sort((a, b) => a.question_order - b.question_order);
+}
+
+/**
+ * Batch-fetch responses for multiple sessions in a SINGLE Supabase query.
+ * Returns a Map keyed by session_id for O(1) lookup.
+ *
+ * Use this instead of calling getSessionResponses() in a loop.
+ *
+ * @param sessionIds - Array of session UUIDs
+ */
+export async function getResponsesForSessions(
+  sessionIds: string[]
+): Promise<Map<string, ResponseRow[]>> {
+  const result = new Map<string, ResponseRow[]>();
+  if (!sessionIds.length) return result;
+
+  const validIds = sessionIds.filter(isValidUUID);
+
+  if (isSupabaseServerConfigured() && validIds.length > 0) {
+    const admin = getSupabaseAdmin();
+    const { data, error } = await admin
+      .from("responses")
+      .select("*")
+      .in("session_id", validIds)
+      .order("question_order", { ascending: true });
+
+    if (error) {
+      console.error("[getResponsesForSessions] Supabase database error:", error.message);
+      throw new Error(`Failed to batch-fetch session responses: ${error.message}`);
+    }
+
+    for (const row of data as ResponseRow[]) {
+      const arr = result.get(row.session_id) || [];
+      arr.push(row);
+      result.set(row.session_id, arr);
+    }
+    return result;
+  }
+
+  // Demo mode: collect from in-memory
+  for (const id of sessionIds) {
+    const list = inMemoryResponses.get(id) || [];
+    result.set(id, [...list].sort((a, b) => a.question_order - b.question_order));
+  }
+  return result;
 }

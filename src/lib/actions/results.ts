@@ -214,8 +214,12 @@ export async function getSessionResult(
     };
   }
 
-  // 2. Fetch all completed sessions for history list and default selection.
-  const allSessions = await getStudentSessions(student.id, 10_000);
+  // 2 & 6. Fetch completed sessions AND responses for target in parallel when sessionId is known.
+  // Sessions always needed for history sidebar. Responses fetched speculatively if we have an ID.
+  const [allSessions, speculativeResponses] = await Promise.all([
+    getStudentSessions(student.id, 50),
+    sessionId ? getSessionResponses(sessionId) : Promise.resolve(null),
+  ]);
 
   const sessionHistory: SessionHistoryItem[] = (allSessions || []).map((s) => ({
     id: s.id,
@@ -236,9 +240,9 @@ export async function getSessionResult(
     };
   }
 
-  // 3. Resolve target session
+  // 3. Resolve target session (check already-fetched allSessions first to avoid extra DB query)
   let targetSession = sessionId
-    ? await getSessionById(sessionId)
+    ? (allSessions.find((s) => s.id === sessionId) || await getSessionById(sessionId))
     : allSessions[0]; // newest completed session
 
   if (!targetSession) {
@@ -270,38 +274,41 @@ export async function getSessionResult(
     };
   }
 
-  // 6. Fetch responses (ordered by question_order ascending)
-  const responses = await getSessionResponses(targetSession.id, student.id);
+  // 6. Use speculatively-fetched responses if they match, otherwise fetch now
+  const responses = (speculativeResponses && sessionId === targetSession.id)
+    ? speculativeResponses
+    : await getSessionResponses(targetSession.id, student.id);
 
-  // 7. Fetch full question data for each response (correct answer + explanation revealed here)
-  const questionItems: ResultQuestionItem[] = [];
-
-  for (const resp of responses) {
-    const question = await fetchQuestionById(resp.question_id);
-
-    questionItems.push({
-      questionNumber: resp.question_order,
-      questionId: resp.question_id,
-      questionText: question?.questionText || "[Question not found]",
-      options: question?.options || [],
-      topic: TOPIC_METADATA[resp.topic_code]?.name || resp.topic_code,
-      topicCode: resp.topic_code,
-      subtopic: question?.subtopic || "",
-      difficultyLevel: resp.difficulty_level,
-      difficultyLabel: question?.difficultyLabel || `Level ${resp.difficulty_level}`,
-      selectedOptionIndex: resp.selected_option_index,
-      correctOptionIndex: question?.correctOptionIndex ?? -1,
-      explanation: question?.explanation || "",
-      isCorrect: resp.is_correct,
-      timeTakenSec: resp.time_taken_sec,
-      timeRemainingSec: resp.time_remaining_sec,
-      abilityBefore: resp.ability_before,
-      abilityAfter: resp.ability_after,
-      baseScore: resp.base_score,
-      speedBonus: resp.speed_bonus,
-      totalScore: resp.total_score,
-    });
-  }
+  // 7. Fetch full question data for ALL responses in parallel (all from in-memory cache)
+  const questionItems: ResultQuestionItem[] = await Promise.all(
+    responses.map(async (resp) => {
+      const question = await fetchQuestionById(resp.question_id);
+      return {
+        questionNumber: resp.question_order,
+        questionId: resp.question_id,
+        questionText: question?.questionText || "[Question not found]",
+        options: question?.options || [],
+        topic: TOPIC_METADATA[resp.topic_code]?.name || resp.topic_code,
+        topicCode: resp.topic_code,
+        subtopic: question?.subtopic || "",
+        difficultyLevel: resp.difficulty_level,
+        difficultyLabel: question?.difficultyLabel || `Level ${resp.difficulty_level}`,
+        selectedOptionIndex: resp.selected_option_index,
+        correctOptionIndex: question?.correctOptionIndex ?? -1,
+        explanation: question?.explanation || "",
+        isCorrect: resp.is_correct,
+        timeTakenSec: resp.time_taken_sec,
+        timeRemainingSec: resp.time_remaining_sec,
+        abilityBefore: resp.ability_before,
+        abilityAfter: resp.ability_after,
+        baseScore: resp.base_score,
+        speedBonus: resp.speed_bonus,
+        totalScore: resp.total_score,
+      };
+    })
+  );
+  // Sort by question_order ascending (responses are already ordered but be safe)
+  questionItems.sort((a, b) => a.questionNumber - b.questionNumber);
 
   // 8. Build derived data
   const topicSummaries = buildTopicSummaries(questionItems);

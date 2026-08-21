@@ -10,6 +10,7 @@
  * The client NEVER evaluates correctness or scores.
  */
 
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import type { Database, QuestionSafeRow, SessionRow } from "@/lib/db/types";
@@ -43,50 +44,55 @@ import type { AssessmentQuestion } from "@/lib/mock-data";
 
 /**
  * Authenticate the student from SSR session cookies.
+ *
+ * Uses authoritative server-side identity verification via supabase.auth.getUser().
+ * Memoized with React.cache() for deduplication within a single request / render tree.
  */
-export async function getAuthenticatedStudent(): Promise<{ id: string; email?: string } | null> {
-  try {
-    const cookieStore = await cookies();
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+export const getAuthenticatedStudent = cache(
+  async (): Promise<{ id: string; email?: string } | null> => {
+    try {
+      const cookieStore = await cookies();
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    if (!supabaseUrl || !supabaseAnonKey) {
-      // In guest or local development mode with no Supabase configured
-      return { id: "demo-student-user", email: "demo@parakh.edu" };
+      if (!supabaseUrl || !supabaseAnonKey) {
+        // In guest or local development mode with no Supabase configured
+        return { id: "demo-student-user", email: "demo@parakh.edu" };
+      }
+
+      const supabase = createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll();
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Ignore in Server Actions
+            }
+          },
+        },
+      });
+
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
+      if (!error && user) {
+        return { id: user.id, email: user.email };
+      }
+    } catch {
+      // In non-request execution contexts or unauthenticated demo sessions
     }
 
-    const supabase = createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
-          } catch {
-            // Ignore in Server Actions
-          }
-        },
-      },
-    });
-
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-
-    if (!error && user) {
-      return { id: user.id, email: user.email };
-    }
-  } catch {
-    // In non-request execution contexts or unauthenticated demo sessions
+    // Fallback for demo mode if not logged in
+    return { id: "demo-student-user", email: "demo@parakh.edu" };
   }
-
-  // Fallback for demo mode if not logged in
-  return { id: "demo-student-user", email: "demo@parakh.edu" };
-}
+);
 
 export type StartSessionResult =
   | {
@@ -111,6 +117,41 @@ export type DiagnosticQuizResult =
       success: false;
       error: string;
     };
+
+export type TopicCalibrationResult =
+  | {
+      isCalibrated: true;
+      /** Existing topic ability on [5, 100] — use directly as starting ability */
+      startingAbility: number;
+    }
+  | {
+      isCalibrated: false;
+    };
+
+/**
+ * Check whether the authenticated student already has a calibrated ability estimate
+ * for the given topic. Used to decide whether to run the pre-assessment diagnostic.
+ *
+ * - Single topics (DSA / DBMS / OS / CN): calibrated iff ability_estimates has a row for that topic.
+ * - Mixed: never considered calibrated (no single canonical topic_id for Mixed).
+ */
+export async function checkTopicCalibration(
+  topic: string
+): Promise<TopicCalibrationResult> {
+  if (topic === "Mixed") {
+    return { isCalibrated: false };
+  }
+
+  const student = await getAuthenticatedStudent();
+  if (!student) return { isCalibrated: false };
+
+  const estimates = await getStudentAbility(student.id);
+  const existing = estimates.find((e) => e.topic_id === topic);
+  if (existing && typeof existing.ability === "number" && !isNaN(existing.ability)) {
+    return { isCalibrated: true, startingAbility: existing.ability };
+  }
+  return { isCalibrated: false };
+}
 
 /**
  * Fetch the 5 safe diagnostic questions for pre-assessment calibration.
@@ -144,28 +185,38 @@ export interface StartWithDiagnosticParams {
   diagnosticAnswers: DiagnosticAnswerSubmission[];
 }
 
+export type EvaluateDiagnosticResult =
+  | {
+      success: true;
+      calibratedAbility: number;
+    }
+  | {
+      success: false;
+      error: string;
+    };
+
 /**
- * Server-authoritatively evaluate the 5 diagnostic answers, calculate the student's ability prior,
- * and start the main adaptive assessment.
+ * Server-authoritatively evaluate the 5 diagnostic answers and calculate the student's
+ * calibrated ability prior WITHOUT creating a database session.
+ * Used to present the Calibration Result Screen to the student before they click "Begin Assessment".
  */
-export async function startAssessmentWithDiagnostic(
-  params: StartWithDiagnosticParams
-): Promise<StartSessionResult> {
+export async function evaluateDiagnosticCalibration(params: {
+  topic: string;
+  selfAssessmentTier?: string | null;
+  diagnosticAnswers: DiagnosticAnswerSubmission[];
+}): Promise<EvaluateDiagnosticResult> {
   const student = await getAuthenticatedStudent();
   if (!student) {
-    return { success: false, error: "Unauthorized: Please log in to begin an assessment." };
+    return { success: false, error: "Unauthorized: Please log in." };
   }
 
   const validTopics = ["Mixed", "DSA", "DBMS", "OS", "CN"];
   const topicFilter = validTopics.includes(params.topic) ? (params.topic as any) : "Mixed";
-  const requestedCount = [5, 10, 15].includes(params.count) ? params.count : 5;
 
   // 1. Evaluate diagnostic questions server-side
   const diagnosticResults: Array<{ isCorrect: boolean; difficultyScore: number }> = [];
-  const diagnosticQuestionIds = new Set<string>();
 
   for (const ans of params.diagnosticAnswers) {
-    diagnosticQuestionIds.add(ans.questionId);
     const q = await fetchQuestionById(ans.questionId);
     if (q) {
       const isCorrect =
@@ -204,6 +255,68 @@ export async function startAssessmentWithDiagnostic(
     historicalAbility,
   });
 
+  return {
+    success: true,
+    calibratedAbility: startingAbility,
+  };
+}
+
+/**
+ * Server-authoritatively evaluate the 5 diagnostic answers, calculate the student's ability prior,
+ * create the database assessment session, and start the main adaptive assessment.
+ * Called only when the student explicitly clicks "Begin Assessment" on the calibration result screen.
+ */
+export async function startAssessmentWithDiagnostic(
+  params: StartWithDiagnosticParams
+): Promise<StartSessionResult> {
+  const student = await getAuthenticatedStudent();
+  if (!student) {
+    return { success: false, error: "Unauthorized: Please log in to begin an assessment." };
+  }
+
+  const validTopics = ["Mixed", "DSA", "DBMS", "OS", "CN"];
+  const topicFilter = validTopics.includes(params.topic) ? (params.topic as any) : "Mixed";
+  const requestedCount = [5, 10, 15].includes(params.count) ? params.count : 5;
+
+  // 1. Evaluate diagnostic questions server-side
+  const diagnosticResults: Array<{ isCorrect: boolean; difficultyScore: number }> = [];
+  const diagnosticQuestionIds = new Set<string>();
+
+  for (const ans of params.diagnosticAnswers) {
+    diagnosticQuestionIds.add(ans.questionId);
+    const q = await fetchQuestionById(ans.questionId);
+    if (q) {
+      const isCorrect =
+        ans.selectedOptionIndex !== -1 && ans.selectedOptionIndex === q.correctOptionIndex;
+      diagnosticResults.push({ isCorrect, difficultyScore: q.difficultyScore });
+    }
+  }
+
+  // 2. Compute diagnostic ability (15–88)
+  const diagnosticAbility = calculateDiagnosticAbility(diagnosticResults);
+
+  // 3. Fetch historical ability for this student (if returning student)
+  let historicalAbility: number | null = null;
+  if (student.id) {
+    const historicalEstimates = await getStudentAbility(student.id);
+    if (topicFilter === "Mixed") {
+      if (historicalEstimates.length > 0) {
+        const sum = historicalEstimates.reduce((acc, est) => acc + est.ability, 0);
+        historicalAbility = sum / historicalEstimates.length;
+      }
+    } else {
+      const topicEst = historicalEstimates.find((e) => e.topic_id === topicFilter);
+      if (topicEst) historicalAbility = topicEst.ability;
+    }
+  }
+
+  // 4. Compute overall calibrated ability prior (with shrinkage)
+  const startingAbility = calculateAbilityPrior({
+    diagnosticAbility,
+    selfAssessmentTier: params.selfAssessmentTier,
+    historicalAbility,
+  });
+
   // 5. Select Question 1 of the main adaptive assessment (excluding diagnostic questions)
   const pool = await fetchApprovedQuestions(topicFilter);
   const firstQuestion = selectNextQuestion(startingAbility, diagnosticQuestionIds, topicFilter, pool);
@@ -212,7 +325,7 @@ export async function startAssessmentWithDiagnostic(
     return { success: false, error: "No questions available for the selected topic." };
   }
 
-  // 6. Create database session record with computed ability_start
+  // Create database session record with computed ability_start
   const session = await createSession({
     student_id: student.id,
     topic_filter: topicFilter,
@@ -232,7 +345,11 @@ export async function startAssessmentWithDiagnostic(
 }
 
 /**
- * Start a new server-authoritative assessment session (legacy direct start).
+ * Start a new server-authoritative assessment session.
+ *
+ * Server determines starting ability authoritatively from persisted student topic estimates:
+ * - If student has a persisted estimate for the selected topic (DSA/DBMS/OS/CN), use that ability.
+ * - Otherwise (first-time topic or Mixed), default to INITIAL_ABILITY (50.0).
  */
 export async function startAssessmentSession(
   topic: string,
@@ -247,9 +364,20 @@ export async function startAssessmentSession(
   const topicFilter = validTopics.includes(topic) ? (topic as any) : "Mixed";
   const requestedCount = [5, 10, 15].includes(count) ? count : 5;
 
-  // Load pool and select first question on server
+  let startAbility = INITIAL_ABILITY;
+
+  // Single topics: look up persisted ability from database for returning students
+  if (topicFilter !== "Mixed" && student.id) {
+    const estimates = await getStudentAbility(student.id);
+    const existing = estimates.find((e) => e.topic_id === topicFilter);
+    if (existing && typeof existing.ability === "number" && !isNaN(existing.ability)) {
+      startAbility = existing.ability;
+    }
+  }
+
+  // Load pool and select first question on server targeting the starting ability
   const pool = await fetchApprovedQuestions(topicFilter);
-  const firstQuestion = selectNextQuestion(INITIAL_ABILITY, new Set(), topicFilter, pool);
+  const firstQuestion = selectNextQuestion(startAbility, new Set(), topicFilter, pool);
 
   if (!firstQuestion) {
     return { success: false, error: "No questions available for the selected topic." };
@@ -260,7 +388,7 @@ export async function startAssessmentSession(
     student_id: student.id,
     topic_filter: topicFilter,
     requested_count: requestedCount,
-    ability_start: INITIAL_ABILITY,
+    ability_start: startAbility,
     status: "in_progress",
   });
 
@@ -269,7 +397,7 @@ export async function startAssessmentSession(
     sessionId: session.id,
     topic: topicFilter,
     requestedCount,
-    initialAbility: INITIAL_ABILITY,
+    initialAbility: startAbility,
     firstQuestion: toSafeQuestion(firstQuestion),
   };
 }
@@ -339,9 +467,51 @@ export type SubmitAnswerResult =
       error: string;
     };
 
+export type DiagnosticFeedbackResult =
+  | {
+      success: true;
+      isCorrect: boolean;
+      correctOptionIndex: number;
+      explanation: string;
+    }
+  | {
+      success: false;
+      error: string;
+    };
+
+/**
+ * Server-authoritatively evaluate a single diagnostic question attempt and return feedback
+ * (correctness, correct option index, explanation) without exposing answers in advance.
+ */
+export async function evaluateDiagnosticAnswer(params: {
+  questionId: string;
+  selectedOptionIndex: number;
+}): Promise<DiagnosticFeedbackResult> {
+  const student = await getAuthenticatedStudent();
+  if (!student) {
+    return { success: false, error: "Unauthorized." };
+  }
+
+  const question = await fetchQuestionById(params.questionId);
+  if (!question) {
+    return { success: false, error: "Question not found." };
+  }
+
+  const isCorrect =
+    params.selectedOptionIndex !== -1 &&
+    params.selectedOptionIndex === question.correctOptionIndex;
+
+  return {
+    success: true,
+    isCorrect,
+    correctOptionIndex: question.correctOptionIndex,
+    explanation: question.explanation,
+  };
+}
+
 /**
  * Submit an answer for the current question. Evaluated entirely on server.
- * Handles duplicate submissions idempotently.
+ * Handles duplicate submissions idempotently with sub-second performance.
  */
 export async function submitQuestionAnswer(params: {
   sessionId: string;
@@ -356,8 +526,13 @@ export async function submitQuestionAnswer(params: {
 
   const { sessionId, questionId, selectedOptionIndex, timeRemainingSec } = params;
 
-  // 1. Verify session exists and belongs to student
-  const session = await getSessionById(sessionId, student.id);
+  // 1. Parallelize session verification, previous responses lookup, and question fetch
+  const [session, previousResponses, question] = await Promise.all([
+    getSessionById(sessionId, student.id),
+    getSessionResponses(sessionId),
+    fetchQuestionById(questionId),
+  ]);
+
   if (!session) {
     return { success: false, error: "Assessment session not found or unauthorized." };
   }
@@ -366,17 +541,13 @@ export async function submitQuestionAnswer(params: {
     return { success: false, error: "Assessment session is already completed or abandoned." };
   }
 
-  // 2. Fetch existing responses for this session
-  const previousResponses = await getSessionResponses(sessionId);
+  if (!question) {
+    return { success: false, error: "Question not found." };
+  }
 
   // DUPLICATE SUBMISSION GUARD:
   // If this questionId was already answered, return existing response result idempotently
   const existingResponse = previousResponses.find((r) => r.question_id === questionId);
-  const question = await fetchQuestionById(questionId);
-
-  if (!question) {
-    return { success: false, error: "Question not found." };
-  }
 
   let isCorrect: boolean;
   let baseScore: number;
@@ -384,6 +555,7 @@ export async function submitQuestionAnswer(params: {
   let totalScore: number;
   let abilityBefore: number;
   let abilityAfter: number;
+  let latestResponseRow: any = null;
 
   if (existingResponse) {
     // Already recorded — use saved values
@@ -393,8 +565,9 @@ export async function submitQuestionAnswer(params: {
     totalScore = existingResponse.total_score;
     abilityBefore = existingResponse.ability_before;
     abilityAfter = existingResponse.ability_after;
+    latestResponseRow = existingResponse;
   } else {
-    // 3. Evaluate correctness and score server-side
+    // 2. Evaluate correctness and score server-side
     isCorrect =
       selectedOptionIndex !== -1 &&
       selectedOptionIndex === question.correctOptionIndex;
@@ -418,8 +591,8 @@ export async function submitQuestionAnswer(params: {
       TIMER_SECONDS
     );
 
-    // 4. Save response to database
-    await insertResponse({
+    // 3. Save response to database
+    latestResponseRow = await insertResponse({
       session_id: sessionId,
       question_id: questionId,
       question_order: previousResponses.length + 1,
@@ -449,13 +622,16 @@ export async function submitQuestionAnswer(params: {
     abilityAfter,
   };
 
-  // Re-fetch all responses to check completion
-  const allResponses = await getSessionResponses(sessionId);
+  // Construct allResponses in-memory without redundant database roundtrip
+  const allResponses = existingResponse
+    ? previousResponses
+    : [...previousResponses, latestResponseRow];
+
   const currentCount = allResponses.length;
   const isCompleted = currentCount >= session.requested_count;
 
   if (!isCompleted) {
-    // 5. Select next question adaptively on server
+    // 4. Select next question adaptively on server (instant cache lookup)
     const usedIds = new Set(allResponses.map((r) => r.question_id));
     const pool = await fetchApprovedQuestions(session.topic_filter);
     const nextQuestion = selectNextQuestion(abilityAfter, usedIds, session.topic_filter, pool);
@@ -471,7 +647,7 @@ export async function submitQuestionAnswer(params: {
     }
   }
 
-  // 6. Complete assessment session server-side
+  // 5. Complete assessment session server-side
   const actualCount = allResponses.length;
   const correctCount = allResponses.filter((r) => r.is_correct).length;
   const percentageScore = Math.round((correctCount / actualCount) * 100);
@@ -481,30 +657,31 @@ export async function submitQuestionAnswer(params: {
   const abilityDelta = finalAbility - session.ability_start;
   const completedAt = new Date().toISOString();
 
-  await updateSession(sessionId, {
-    actual_count: actualCount,
-    correct_count: correctCount,
-    percentage_score: percentageScore,
-    total_score: sumTotalScore,
-    total_bonus: sumTotalBonus,
-    ability_final: finalAbility,
-    ability_delta: abilityDelta,
-    status: "completed",
-    completed_at: completedAt,
-  });
-
-  // 7. Update student's rolling ability estimates in database
-  await upsertAbilityEstimates([
-    {
-      student_id: student.id,
-      topic_id: session.topic_filter,
-      ability: finalAbility,
-      total_questions: actualCount,
+  // Run session completion and rolling ability update in parallel
+  await Promise.all([
+    updateSession(sessionId, {
+      actual_count: actualCount,
       correct_count: correctCount,
-    },
+      percentage_score: percentageScore,
+      total_score: sumTotalScore,
+      total_bonus: sumTotalBonus,
+      ability_final: finalAbility,
+      ability_delta: abilityDelta,
+      status: "completed",
+      completed_at: completedAt,
+    }),
+    upsertAbilityEstimates([
+      {
+        student_id: student.id,
+        topic_id: session.topic_filter,
+        ability: finalAbility,
+        total_questions: actualCount,
+        correct_count: correctCount,
+      },
+    ]),
   ]);
 
-  // Build full response review
+  // Build full response review using in-memory question lookups (sub-millisecond)
   const fullResponsesReview = [];
   for (const resp of allResponses) {
     const qDetails = await fetchQuestionById(resp.question_id);
@@ -600,7 +777,12 @@ export async function getActiveAssessmentSession(): Promise<ActiveSessionResult>
     return { hasActiveSession: false };
   }
 
-  const activeSession = await getActiveSession(student.id);
+  // Parallelize: find active session AND warm the question pool cache simultaneously
+  const [activeSession] = await Promise.all([
+    getActiveSession(student.id),
+    fetchApprovedQuestions(), // warm cache while session query runs
+  ]);
+
   if (!activeSession) {
     return { hasActiveSession: false };
   }
@@ -612,12 +794,12 @@ export async function getActiveAssessmentSession(): Promise<ActiveSessionResult>
       ? responses[responses.length - 1].ability_after
       : activeSession.ability_start;
 
-  // Build previous results
-  const previousResults = [];
-  for (const resp of responses) {
-    const qDetails = await fetchQuestionById(resp.question_id);
-    if (qDetails) {
-      previousResults.push({
+  // Build previous results — all questions come from in-memory cache (sub-ms)
+  const previousResults = await Promise.all(
+    responses.map(async (resp) => {
+      const qDetails = await fetchQuestionById(resp.question_id);
+      if (!qDetails) return null;
+      return {
         questionId: qDetails.id,
         questionText: qDetails.questionText,
         topic: qDetails.topic,
@@ -636,9 +818,9 @@ export async function getActiveAssessmentSession(): Promise<ActiveSessionResult>
         totalScore: resp.total_score,
         abilityBefore: resp.ability_before,
         abilityAfter: resp.ability_after,
-      });
-    }
-  }
+      };
+    })
+  ).then((items) => items.filter(Boolean) as any[]);
 
   if (responses.length < activeSession.requested_count) {
     const pool = await fetchApprovedQuestions(activeSession.topic_filter);

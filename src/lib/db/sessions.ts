@@ -5,14 +5,19 @@
  * Import only in Server Actions, API routes, or server components — never in client components.
  */
 
-import { getSupabaseAdmin } from "./server-client";
+import { getSupabaseAdmin, isSupabaseServerConfigured } from "./server-client";
 import type { SessionRow, SessionInsert } from "./types";
 
 /**
- * In-memory fallback session store for development or environments
- * when Supabase database is unreachable.
+ * In-memory fallback session store for development or demo environments
+ * when Supabase database is genuinely not configured.
  */
 const inMemorySessions = new Map<string, SessionRow>();
+
+function isValidUUID(str?: string): boolean {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
 
 /**
  * Create a new session record in the database.
@@ -24,7 +29,7 @@ const inMemorySessions = new Map<string, SessionRow>();
 export async function createSession(
   data: SessionInsert
 ): Promise<SessionRow> {
-  const sessionId = data.id || `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  const sessionId = data.id && isValidUUID(data.id) ? data.id : crypto.randomUUID();
   const now = new Date().toISOString();
 
   const newSession: SessionRow = {
@@ -45,7 +50,7 @@ export async function createSession(
     completed_at: data.completed_at ?? null,
   };
 
-  try {
+  if (isSupabaseServerConfigured() && isValidUUID(data.student_id)) {
     const admin = getSupabaseAdmin();
     const { data: inserted, error } = await admin
       .from("sessions")
@@ -55,13 +60,15 @@ export async function createSession(
       .select()
       .single();
 
-    if (!error && inserted) {
-      return inserted as SessionRow;
+    if (error) {
+      console.error("[createSession] Supabase database error:", error.message);
+      throw new Error(`Failed to create assessment session: ${error.message}`);
     }
-  } catch {
-    // Database fallback to memory store
+
+    return inserted as SessionRow;
   }
 
+  // Explicit demo mode
   inMemorySessions.set(sessionId, newSession);
   return newSession;
 }
@@ -74,7 +81,7 @@ export async function createSession(
 export async function getActiveSession(
   studentId: string
 ): Promise<SessionRow | null> {
-  try {
+  if (isSupabaseServerConfigured() && isValidUUID(studentId)) {
     const admin = getSupabaseAdmin();
     const { data, error } = await admin
       .from("sessions")
@@ -85,14 +92,15 @@ export async function getActiveSession(
       .limit(1)
       .maybeSingle();
 
-    if (!error && data) {
-      return data as SessionRow;
+    if (error) {
+      console.error("[getActiveSession] Supabase database error:", error.message);
+      throw new Error(`Failed to fetch active session: ${error.message}`);
     }
-  } catch {
-    // Fallback
+
+    return (data as SessionRow) || null;
   }
 
-  // Check in-memory store
+  // Fallback / Demo mode / Non-UUID student ID
   for (const session of inMemorySessions.values()) {
     if (session.student_id === studentId && session.status === "in_progress") {
       return session;
@@ -112,7 +120,15 @@ export async function updateSession(
   sessionId: string,
   patch: Partial<SessionRow>
 ): Promise<SessionRow | null> {
-  try {
+  // Check in-memory first — in-memory sessions have real UUIDs but no Supabase row
+  const inMemory = inMemorySessions.get(sessionId);
+  if (inMemory) {
+    const updated = { ...inMemory, ...patch };
+    inMemorySessions.set(sessionId, updated);
+    return updated;
+  }
+
+  if (isSupabaseServerConfigured() && isValidUUID(sessionId)) {
     const admin = getSupabaseAdmin();
     const { data, error } = await admin
       .from("sessions")
@@ -121,18 +137,12 @@ export async function updateSession(
       .select()
       .single();
 
-    if (!error && data) {
-      return data as SessionRow;
+    if (error) {
+      console.error("[updateSession] Supabase database error:", error.message);
+      throw new Error(`Failed to update session: ${error.message}`);
     }
-  } catch {
-    // Fallback
-  }
 
-  const existing = inMemorySessions.get(sessionId);
-  if (existing) {
-    const updated = { ...existing, ...patch };
-    inMemorySessions.set(sessionId, updated);
-    return updated;
+    return (data as SessionRow) || null;
   }
 
   return null;
@@ -149,7 +159,18 @@ export async function getSessionById(
   sessionId: string,
   studentId?: string
 ): Promise<SessionRow | null> {
-  try {
+  // Check in-memory first — demo sessions have real UUIDs but no Supabase row
+  const inMemory = inMemorySessions.get(sessionId);
+  if (inMemory) {
+    if (studentId && inMemory.student_id !== studentId) return null;
+    return inMemory;
+  }
+
+  if (
+    isSupabaseServerConfigured() &&
+    isValidUUID(sessionId) &&
+    (!studentId || isValidUUID(studentId))
+  ) {
     const admin = getSupabaseAdmin();
     let query = admin.from("sessions").select("*").eq("id", sessionId);
 
@@ -157,19 +178,14 @@ export async function getSessionById(
       query = query.eq("student_id", studentId);
     }
 
-    const { data, error } = await query.single();
+    const { data, error } = await query.maybeSingle();
 
-    if (!error && data) {
-      return data as SessionRow;
+    if (error) {
+      console.error("[getSessionById] Supabase database error:", error.message);
+      throw new Error(`Failed to fetch session by id: ${error.message}`);
     }
-  } catch {
-    // Fallback
-  }
 
-  const session = inMemorySessions.get(sessionId);
-  if (session) {
-    if (studentId && session.student_id !== studentId) return null;
-    return session;
+    return (data as SessionRow) || null;
   }
 
   return null;
@@ -185,7 +201,7 @@ export async function getStudentSessions(
   studentId: string,
   limit = 20
 ): Promise<SessionRow[]> {
-  try {
+  if (isSupabaseServerConfigured() && isValidUUID(studentId)) {
     const admin = getSupabaseAdmin();
     const { data, error } = await admin
       .from("sessions")
@@ -195,13 +211,15 @@ export async function getStudentSessions(
       .order("completed_at", { ascending: false })
       .limit(limit);
 
-    if (!error && data) {
-      return data as SessionRow[];
+    if (error) {
+      console.error("[getStudentSessions] Supabase database error:", error.message);
+      throw new Error(`Failed to fetch student sessions: ${error.message}`);
     }
-  } catch {
-    // Fallback
+
+    return (data as SessionRow[]) || [];
   }
 
+  // Explicit demo mode
   const results: SessionRow[] = [];
   for (const session of inMemorySessions.values()) {
     if (session.student_id === studentId && session.status === "completed") {
