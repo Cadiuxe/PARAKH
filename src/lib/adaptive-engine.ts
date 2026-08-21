@@ -106,23 +106,33 @@ export function targetDifficulty(ability: number): number {
 // ─── Question Selection ───────────────────────────────────────────────────────
 
 /**
- * Select the next question adaptively using continuous difficulty targeting.
+ * Select the next question adaptively using refined continuous difficulty targeting (Phase 5.8).
  *
- * Strategy:
- *  1. Filter by topic (or "Mixed" = all topics).
- *  2. Exclude already-used question IDs.
- *  3. Calculate distance between each question's difficultyScore (0–100) and current ability.
- *  4. Find the closest difficulty distance available in the eligible pool.
- *  5. Collect candidates within a tight proximity tolerance to balance deterministic difficulty
- *     proximity with randomness among equally suitable items.
- *  6. Select uniformly at random among top candidates.
- *  7. Return null if no question is available (pool exhausted).
+ * Ranking & Selection Strategy:
+ *  1. Eligibility Filter:
+ *     - Exclude questions whose ID is in `usedIds`.
+ *     - Restrict to `topic` (or allow all if "Mixed").
+ *     - Return null if eligible pool is empty (pool exhausted).
  *
- * @param ability      Current ability estimate (0–100)
- * @param usedIds      Set of question IDs already used this session
- * @param topic        "Mixed" or a specific topic ("DSA", "DBMS", "OS", "CN")
+ *  2. Continuous Distance Minimization:
+ *     - Target difficulty = clamped ability (0–100).
+ *     - For each eligible question, compute absolute distance |difficultyScore - target|.
+ *     - Find the minimum distance (minDistance) in the eligible pool.
+ *     - Collect top candidates whose distance is within a tight proximity tolerance (tolerance = 5.0).
+ *
+ *  3. Topic Balancing for Mixed Assessments:
+ *     - When topic === "Mixed", count how many questions from each topic have already been used in this session.
+ *     - Determine the minimum usage count among the top difficulty candidates.
+ *     - Filter candidates to those belonging to the least-represented topic(s) so far.
+ *
+ *  4. Controlled Random Tie-Breaking:
+ *     - Select uniformly at random among remaining candidates with equal top-tier priority.
+ *
+ * @param ability      Current student ability estimate (0–100)
+ * @param usedIds      Set of question IDs already used in this session
+ * @param topic        "Mixed" or a specific topic code ("DSA", "DBMS", "OS", "CN")
  * @param questionBank Optional pool override (defaults to QUESTION_BANK)
- * @returns            The selected question or null
+ * @returns            The selected question or null if pool is exhausted
  */
 export function selectNextQuestion(
   ability: number,
@@ -130,7 +140,7 @@ export function selectNextQuestion(
   topic: string,
   questionBank: AssessmentQuestion[] = QUESTION_BANK
 ): AssessmentQuestion | null {
-  // 1. Build the eligible pool
+  // 1. Build the eligible pool (unanswered questions matching topic filter)
   const pool = questionBank.filter((q) => {
     if (usedIds.has(q.id)) return false;
     if (topic !== "Mixed" && q.topic !== topic) return false;
@@ -139,7 +149,7 @@ export function selectNextQuestion(
 
   if (pool.length === 0) return null;
 
-  // 2. Find minimum distance to target continuous ability
+  // 2. Continuous distance minimization
   const target = targetDifficultyScore(ability);
   let minDistance = Infinity;
   for (const q of pool) {
@@ -149,14 +159,43 @@ export function selectNextQuestion(
     }
   }
 
-  // 3. Gather candidates that are closest to the target (within small tolerance)
-  const tolerance = 5;
-  const candidates = pool.filter(
+  // Collect top candidates within proximity tolerance
+  const tolerance = 5.0;
+  const closestCandidates = pool.filter(
     (q) => Math.abs(q.difficultyScore - target) <= minDistance + tolerance
   );
 
-  // 4. Randomly pick one among equally closest candidates
-  return candidates[Math.floor(Math.random() * candidates.length)];
+  // 3. Multi-topic session balancing for Mixed assessments
+  if (topic === "Mixed" && closestCandidates.length > 1) {
+    // Count questions per topic already used in the current session
+    const topicUsage = new Map<string, number>();
+    for (const q of questionBank) {
+      if (usedIds.has(q.id)) {
+        topicUsage.set(q.topic, (topicUsage.get(q.topic) || 0) + 1);
+      }
+    }
+
+    // Find the minimum representation count among the closest candidates' topics
+    let minTopicCount = Infinity;
+    for (const q of closestCandidates) {
+      const count = topicUsage.get(q.topic) || 0;
+      if (count < minTopicCount) {
+        minTopicCount = count;
+      }
+    }
+
+    // Retain only candidates from the least-represented topic(s)
+    const balancedCandidates = closestCandidates.filter(
+      (q) => (topicUsage.get(q.topic) || 0) === minTopicCount
+    );
+
+    if (balancedCandidates.length > 0) {
+      return balancedCandidates[Math.floor(Math.random() * balancedCandidates.length)];
+    }
+  }
+
+  // 4. Controlled uniform random selection among top candidate ties
+  return closestCandidates[Math.floor(Math.random() * closestCandidates.length)];
 }
 
 // ─── Speed Bonus ──────────────────────────────────────────────────────────────

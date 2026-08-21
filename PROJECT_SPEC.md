@@ -8,7 +8,7 @@
 
 ## Project Status
 
-**Current Checkpoint**: Phase 5.7 — Continuous Ability Estimation (Completed)
+**Current Checkpoint**: Phase 5.8 — Adaptive Question Selection Refinement (Completed)
 
 ### Completed Milestones
 - **Phase 1 (Foundation)**: Next.js 16 App Router, Tailwind CSS, shadcn/ui, Lucide Icons, Framer Motion, Recharts, Geist typography.
@@ -39,7 +39,7 @@
   - `src/lib/mock-data.ts` — added `difficultyScore: number` to `AssessmentQuestion` and mapped `QUESTION_BANK` with continuous centroid difficulty values for all 60 prototype items.
   - `src/lib/db/questions.ts` — updated `fetchApprovedQuestions`, `fetchQuestionById`, `mockToQuestionRow`, and `toSafeQuestion` to map and preserve `difficulty_score`.
   - `src/lib/db/responses.ts` — updated `insertResponse` to persist `difficulty_score`.
-  - `src/lib/adaptive-engine.ts` — updated `selectNextQuestion` to target student continuous ability (0–100) directly using distance minimization and proximity candidate selection.
+  - `src/lib/adaptive-engine.ts` — updated `selectNextQuestion` to target student continuous ability (0–100) directly using distance minimization.
   - `src/lib/actions/assessment.ts` — passed `difficultyScore` into response persistence, session completion summaries, and reconnect data.
 - **Phase 5.7 (Continuous Ability Estimation)**:
   - Implemented continuous mathematical ability updating in `src/lib/adaptive-engine.ts`:
@@ -48,29 +48,32 @@
     $$\theta_{\text{next}} = \text{clamp}(\theta + \Delta\theta, 5, 100)$$
   - Integrated `question.difficultyScore` into `submitQuestionAnswer` server action in `src/lib/actions/assessment.ts`.
   - Maintained complete backward compatibility for legacy integer difficulty inputs.
+- **Phase 5.8 (Adaptive Question Selection Refinement)**:
+  - Refined `selectNextQuestion` in `src/lib/adaptive-engine.ts` with continuous distance tiering and session-level topic balancing for Mixed assessments.
+  - Implemented deterministic multi-topic rotation: tracks topic frequency in the active session and prioritizes least-represented topics among candidates at optimal difficulty.
+  - Added robust handling for sparse candidate pools and difficulty region exhaustion.
 
-### Files Changed in Phase 5.7
-- `src/lib/adaptive-engine.ts` (implemented continuous ability estimator formula with dynamic step sizing)
-- `src/lib/actions/assessment.ts` (passed continuous `question.difficultyScore` into `updateAbility`)
-- `PROJECT_SPEC.md` (documented mathematical formula, expected behavior, boundary behavior, and limitations)
+### Files Changed in Phase 5.8
+- `src/lib/adaptive-engine.ts` (refined `selectNextQuestion` with proximity candidate tiering and Mixed session topic balancing)
+- `PROJECT_SPEC.md` (documented selection algorithm, topic balancing, tests, and limitations)
 
-### Tests Performed (Phase 5.7)
+### Tests Performed (Phase 5.8)
 - `npm run build`: Production build and TypeScript validation passed with 0 errors.
 - Deterministic Validation Suite:
-  1. Equal difficulty test ($\theta=50, d=50$): Correct $= 57.5 (+7.5)$, Incorrect $= 42.5 (-7.5)$.
-  2. Stretch item test ($\theta=30, d=88$): Correct $= 44.5 (+14.5)$, Incorrect $= 29.5 (-0.5)$.
-  3. Easy item test ($\theta=80, d=15$): Correct $= 80.3 (+0.3)$, Incorrect $= 65.3 (-14.7)$.
-  4. Minimum boundary test ($\theta=5, d=15$): Incorrect clamped at $5.0$, Correct increases to $14.6$.
-  5. Maximum boundary test ($\theta=98, d=88$): Correct clamped at $100.0$, Incorrect decreases to $88.4$.
-  6. End-to-end multi-step assessment lifecycle test via Server Actions: verified continuous ability transitions and response persistence.
-  7. Idempotent duplicate submission protection verified.
+  1. Centroid targeting across 15, 30, 50, 70, 88.
+  2. Strict used-question exclusion (`usedIds` no-repeat guard).
+  3. Single-topic filtering strictly enforced (e.g. topic = 'OS').
+  4. Mixed assessment multi-topic rotation: verified all 4 distinct topics (DSA, DBMS, OS, CN) are covered across the first 4 questions of a Mixed session.
+  5. Exhaustion fallback: verified graceful transition to adjacent difficulty bands when primary level is exhausted.
+  6. Sparse candidate pool robustness: tested pools with missing intermediate difficulty levels.
+  7. End-to-end multi-step assessment lifecycle test via Server Actions: verified continuous ability transitions, topic rotation, response persistence, and idempotent duplicate submission protection.
 
 ### Known Limitations
-- Response time weighting in ability updates is deferred to Phase 5.8.
-- Question calibration from aggregate student responses is deferred to Phase 5.9.
+- Response time weighting in ability updates is deferred to Phase 5.9.
+- Question calibration from aggregate student responses is deferred to Phase 5.9+.
 
 ### Next Planned Phase
-- **Phase 5.8**: Response Time & Speed-Weighted Psychometric Updates.
+- **Phase 5.9**: Response Time & Speed-Weighted Psychometric Updates.
 
 ---
 
