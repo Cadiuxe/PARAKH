@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play } from "lucide-react";
+import { Play, Target } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import {
   getStoredAssessments,
@@ -64,12 +64,24 @@ export function WelcomeSection() {
                 . {latest?.topic} was your most recent session.
               </>
             ) : (
-              "Complete your first adaptive assessment to establish your initial ability profile and start tracking your topic proficiency."
+              "Complete your pre-assessment knowledge diagnostic to establish your initial ability profile and start tracking topic proficiency."
             )}
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <Button
+            size="lg"
+            variant="outline"
+            asChild
+            className="border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 font-semibold rounded-xl gap-2"
+          >
+            <Link href="/pre-assessment">
+              <Target className="h-4 w-4" />
+              Pre-Assessment Diagnostic
+            </Link>
+          </Button>
+
           <Button
             size="lg"
             asChild
@@ -77,7 +89,7 @@ export function WelcomeSection() {
           >
             <Link href="/assessment">
               <Play className="h-4 w-4 fill-current" />
-              Start Assessment
+              Start CAT Test
             </Link>
           </Button>
         </div>

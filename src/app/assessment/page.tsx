@@ -58,7 +58,7 @@ interface SessionResult {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TOPICS = ["Mixed", "DSA", "DBMS", "OS", "CN"] as const;
-const QUESTION_COUNTS = [5, 10, 15] as const;
+const QUESTION_COUNTS = [5, 10, 15, 20, 25, 30] as const;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -94,6 +94,27 @@ function SetupScreen({ onStart }: { onStart: (topic: string, count: number) => v
           difficulty; incorrect answers recalibrate it.
         </p>
       </div>
+
+      {/* Pre-Assessment Diagnostic Callout */}
+      <Card className="p-4 border border-indigo-500/30 bg-indigo-950/30 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+            <Target className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="font-bold text-sm text-foreground">Haven't taken the Pre-Assessment yet?</div>
+            <div className="text-xs text-muted-foreground">
+              Run a quick baseline diagnostic to benchmark your initial knowledge profile.
+            </div>
+          </div>
+        </div>
+        <Button size="sm" variant="outline" asChild className="border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/20 gap-1.5 shrink-0">
+          <Link href="/pre-assessment">
+            Take Pre-Assessment
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
+      </Card>
 
       <Card className="p-6 border border-border/80 bg-card shadow-md space-y-6">
         {/* Topic */}

@@ -18,6 +18,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "MULYAN — AI-Powered Adaptive Assessment Platform (Powered by PARAKH)",
   description: "MULYAN delivers AI-powered computer adaptive assessments dynamically adjusting difficulty and topic selection, powered by the PARAKH CAT engine.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

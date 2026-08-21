@@ -1,0 +1,14 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="mulyan-blue-grad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#1D4ED8" />
+    </linearGradient>
+  </defs>
+  <rect width="40" height="40" rx="10" fill="url(#mulyan-blue-grad)" />
+  <rect x="0.5" y="0.5" width="39" height="39" rx="9.5" stroke="rgba(255, 255, 255, 0.2)" stroke-width="1" />
+  <rect x="9.5" y="22" width="4.5" height="10" rx="2" fill="#FFFFFF" fill-opacity="0.9" />
+  <rect x="17.5" y="16" width="4.5" height="16" rx="2" fill="#FFFFFF" fill-opacity="0.95" />
+  <rect x="25.5" y="11" width="4.5" height="21" rx="2" fill="#FFFFFF" />
+  <path d="M10 21.5L16.5 28L30.5 12.5" stroke="#F59E0B" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

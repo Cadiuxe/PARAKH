@@ -10,6 +10,7 @@ import {
   ShieldAlert,
   LogOut,
   HelpCircle,
+  Target,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,13 @@ export const mainNavItems: NavItem[] = [
     icon: LayoutDashboard,
   },
   {
-    title: "Assessments",
+    title: "Pre-Assessment",
+    href: "/pre-assessment",
+    icon: Target,
+    badge: "Diagnostic",
+  },
+  {
+    title: "Adaptive Testing",
     href: "/assessment",
     icon: FileCheck2,
   },
