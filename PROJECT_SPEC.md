@@ -966,26 +966,25 @@ Only if everything else works:
 
 Do NOT wait for real data.
 
-Start with:
+Currently seeded:
 
 ```text
-50–100 curated MCQs
+60 curated MCQs (15 each across DSA, DBMS, OS, CN; 3 per difficulty level 1–5)
 ```
 
 across:
 
 ```text
-Data Structures
-Algorithms
-DBMS
-Operating Systems
-Computer Networks
+Data Structures & Algorithms (DSA)
+Database Management Systems (DBMS)
+Operating Systems (OS)
+Computer Networks (CN)
 ```
 
 with:
 
 ```text
-5 difficulty levels
+5 difficulty levels (3 questions per level per topic)
 ```
 
 You can use seeded/synthetic historical usage data for the admin analytics.
