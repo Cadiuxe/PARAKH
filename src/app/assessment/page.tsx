@@ -724,31 +724,43 @@ function QuestionScreen({
 }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState(TIMER_SECONDS);
-  const [submittedTime, setSubmittedTime] = useState<number>(0);
   const autoSubmittedRef = useRef(false);
+  const deadlineRef = useRef<number>(Date.now() + TIMER_SECONDS * 1000);
 
-  // Reset state when question changes
+  // Authoritative client-side calculation from wall-clock deadline
+  const calculateRemainingTime = useCallback(() => {
+    const remainingMs = deadlineRef.current - Date.now();
+    return Math.max(0, Math.min(TIMER_SECONDS, Math.ceil(remainingMs / 1000)));
+  }, []);
+
+  // Reset state and deadline when question changes
   useEffect(() => {
     setSelected(null);
+    deadlineRef.current = Date.now() + TIMER_SECONDS * 1000;
     setTimeLeft(TIMER_SECONDS);
-    setSubmittedTime(0);
     autoSubmittedRef.current = false;
   }, [question.id]);
 
-  // Countdown timer
+  // Synchronized countdown timer
   useEffect(() => {
     if (serverFeedback !== null || isSubmitting) return;
-    if (timeLeft <= 0) {
-      if (!autoSubmittedRef.current) {
-        autoSubmittedRef.current = true;
-        setSubmittedTime(0);
-        onSubmitAnswer(-1, 0);
+
+    const tick = () => {
+      const remaining = calculateRemainingTime();
+      setTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        if (!autoSubmittedRef.current) {
+          autoSubmittedRef.current = true;
+          onSubmitAnswer(-1, 0);
+        }
       }
-      return;
-    }
-    const id = setTimeout(() => setTimeLeft((t) => t - 1), 1000);
-    return () => clearTimeout(id);
-  }, [timeLeft, serverFeedback, isSubmitting, onSubmitAnswer]);
+    };
+
+    tick();
+    const intervalId = setInterval(tick, 200);
+    return () => clearInterval(intervalId);
+  }, [serverFeedback, isSubmitting, calculateRemainingTime, onSubmitAnswer]);
 
   const timerPct = (timeLeft / TIMER_SECONDS) * 100;
   const progress = ((questionIndex) / totalQuestions) * 100;
@@ -756,8 +768,8 @@ function QuestionScreen({
 
   const handleSubmit = () => {
     if (selected === null || isSubmitted || isSubmitting) return;
-    setSubmittedTime(timeLeft);
-    onSubmitAnswer(selected, timeLeft);
+    const remainingAtSubmit = calculateRemainingTime();
+    onSubmitAnswer(selected, remainingAtSubmit);
   };
 
   return (
@@ -789,7 +801,7 @@ function QuestionScreen({
             className={`h-full rounded-full ${
               timerPct > 40 ? "bg-indigo-500" : timerPct > 17 ? "bg-amber-500" : "bg-red-500"
             }`}
-            style={{ width: `${timerPct}%`, transition: "width 1s linear" }}
+            style={{ width: `${timerPct}%`, transition: "width 0.2s linear" }}
           />
         </div>
       </div>
@@ -895,22 +907,35 @@ function QuestionScreen({
                   </span>
                   <span className="flex items-center gap-2 text-foreground">
                     <span className="text-muted-foreground">{serverFeedback.baseScore} base</span>
-                    {serverFeedback.speedBonus > 0 && (
-                      <span className="text-indigo-400 flex items-center gap-1">
-                        <Zap className="h-3 w-3" />
-                        +{serverFeedback.speedBonus} speed
-                      </span>
-                    )}
+                    <span className="text-indigo-400 flex items-center gap-1">
+                      <Zap className="h-3 w-3" />
+                      +{serverFeedback.speedBonus} speed
+                    </span>
                     <span className="font-bold">=&nbsp;{serverFeedback.totalScore} pts</span>
                   </span>
                 </>
               ) : selected === -1 || selected === null ? (
-                <span>Time expired — 0 points awarded</span>
+                <>
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                    Time expired
+                  </span>
+                  <span className="flex items-center gap-2 text-foreground">
+                    <span className="text-muted-foreground">{serverFeedback.baseScore} base</span>
+                    <span className="text-muted-foreground">+0 speed</span>
+                    <span className="font-bold">=&nbsp;0 pts</span>
+                  </span>
+                </>
               ) : (
                 <>
                   <span className="flex items-center gap-1.5">
-                    <XCircle className="h-3.5 w-3.5" />
-                    Incorrect — 0 points
+                    <XCircle className="h-3.5 w-3.5 text-red-400" />
+                    Incorrect
+                  </span>
+                  <span className="flex items-center gap-2 text-foreground">
+                    <span className="text-muted-foreground">{serverFeedback.baseScore} base</span>
+                    <span className="text-muted-foreground">+0 speed</span>
+                    <span className="font-bold">=&nbsp;0 pts</span>
                   </span>
                 </>
               )}

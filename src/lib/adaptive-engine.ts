@@ -239,8 +239,9 @@ export function calculateSpeedBonus(
   remainingTime: number,
   totalTime: number
 ): number {
-  if (!correct) return 0;
-  return Math.floor(SPEED_BONUS_MAX * (remainingTime / totalTime));
+  if (!correct || remainingTime <= 0 || totalTime <= 0) return 0;
+  const clampedRemaining = Math.max(0, Math.min(totalTime, remainingTime));
+  return Math.floor(SPEED_BONUS_MAX * (clampedRemaining / totalTime));
 }
 
 /**
