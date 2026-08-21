@@ -1,13 +1,17 @@
 /**
  * PARAKH Adaptive Engine
  *
- * Adaptive testing algorithm using continuous difficulty targeting (Phase 5.6)
- * and continuous residual-based ability estimation (Phase 5.7).
+ * Adaptive testing algorithm using continuous difficulty targeting (Phase 5.6),
+ * continuous residual-based ability estimation (Phase 5.7),
+ * refined selection with topic balancing (Phase 5.8),
+ * and speed-weighted psychometric updates (Phase 5.9).
  *
  * Design goals:
- *  - Correct answer → ability increases dynamically based on item difficulty: delta = K * (1 - E)
- *  - Incorrect/timed-out answer → ability decreases: delta = K * (0 - E)
+ *  - Correct answer → ability increases dynamically based on item difficulty and speed
+ *  - Incorrect/timed-out answer → ability decreases
  *  - Expected probability E = 1 / (1 + 10^(-(ability - difficultyScore) / 40))
+ *  - Speed weight: correct → 1.0 + 0.20*(timeRemaining/totalTime); incorrect → 1.0 + 0.15*(timeRemaining/totalTime)
+ *  - Delta = 15 * (y - E) * weight
  *  - Next question difficulty directly tracks current continuous ability (0–100)
  *  - No question repeats within one session
  *  - Topic filter is respected
@@ -33,30 +37,39 @@ export const BASE_CORRECT_SCORE = 100;  // base points for a correct answer
 // ─── Ability Updates ──────────────────────────────────────────────────────────
 
 /**
- * Update the estimated ability after answering a question using continuous ability estimation (Phase 5.7).
+ * Update the estimated ability after answering a question using speed-weighted continuous ability estimation (Phase 5.9).
  *
  * Expected probability formula:
  *   E = 1 / (1 + 10^(-(ability - difficultyScore) / 40))
  *
+ * Speed weighting multiplier (bounded):
+ *   timeRatio = clamp(timeRemainingSec / totalTimeSec, 0, 1)
+ *   weight = correct ? 1.0 + 0.20 * timeRatio : 1.0 + 0.15 * timeRatio
+ *   (If timeRemainingSec is omitted, weight defaults to 1.0 for backward compatibility)
+ *
  * Delta adjustment:
- *   delta = K * (y - E), where K = 15 and y = 1 (correct) or 0 (incorrect)
+ *   delta = 15 * (y - E) * weight, where y = 1 (correct) or 0 (incorrect)
  *
  * Properties:
- *  - Correct on harder question (d > ability): larger reward (+7.5 to +14.5)
- *  - Correct on easier question (d < ability): smaller reward (+0.5 to +7.5)
- *  - Incorrect on easier question (d < ability): larger penalty (-7.5 to -14.5)
- *  - Incorrect on harder question (d > ability): smaller penalty (-0.5 to -7.5)
- *  - Matched question (d = ability): ±7.5
+ *  - Fast correct → stronger positive ability update
+ *  - Slow correct → smaller positive update
+ *  - Thoughtful incorrect → approximately baseline penalty
+ *  - Very rapid incorrect → slightly stronger penalty
+ *  - Timeout → incorrect with no speed weighting bonus (weight = 1.0)
  *
  * @param ability              Current ability estimate (0–100)
  * @param correct              Whether the answer was correct
  * @param difficultyScoreOrLevel Question's continuous difficultyScore (0–100) or legacy level (1–5)
+ * @param timeRemainingSec     Optional seconds remaining when answered
+ * @param totalTimeSec         Optional total allowed seconds (defaults to TIMER_SECONDS = 90)
  * @returns New continuous ability estimate clamped to [5, 100], rounded to 1 decimal place
  */
 export function updateAbility(
   ability: number,
   correct: boolean,
-  difficultyScoreOrLevel: number
+  difficultyScoreOrLevel: number,
+  timeRemainingSec?: number,
+  totalTimeSec: number = TIMER_SECONDS
 ): number {
   // If a legacy integer difficulty level (1–5) is passed, map it to its continuous centroid
   const difficultyScore =
@@ -68,10 +81,18 @@ export function updateAbility(
   const exponent = -(ability - difficultyScore) / 40;
   const expected = 1 / (1 + Math.pow(10, exponent));
 
+  // Compute bounded speed-weighting multiplier
+  let weight = 1.0;
+  if (timeRemainingSec !== undefined && timeRemainingSec !== null) {
+    const totalTime = totalTimeSec > 0 ? totalTimeSec : TIMER_SECONDS;
+    const timeRatio = Math.max(0, Math.min(1, timeRemainingSec / totalTime));
+    weight = correct ? 1.0 + 0.20 * timeRatio : 1.0 + 0.15 * timeRatio;
+  }
+
   // Sensitivity constant K = 15
   const K = 15;
   const outcome = correct ? 1 : 0;
-  const delta = K * (outcome - expected);
+  const delta = K * (outcome - expected) * weight;
 
   const nextAbility = ability + delta;
   const clamped = Math.max(5, Math.min(100, nextAbility));

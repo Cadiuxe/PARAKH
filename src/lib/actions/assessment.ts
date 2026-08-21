@@ -278,7 +278,13 @@ export async function submitQuestionAnswer(params: {
         ? previousResponses[previousResponses.length - 1].ability_after
         : session.ability_start;
 
-    abilityAfter = updateAbility(abilityBefore, isCorrect, question.difficultyScore);
+    abilityAfter = updateAbility(
+      abilityBefore,
+      isCorrect,
+      question.difficultyScore,
+      clampedTimeRemaining,
+      TIMER_SECONDS
+    );
 
     // 4. Save response to database
     await insertResponse({

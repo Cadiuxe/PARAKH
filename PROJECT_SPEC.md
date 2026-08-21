@@ -8,7 +8,7 @@
 
 ## Project Status
 
-**Current Checkpoint**: Phase 5.8 — Adaptive Question Selection Refinement (Completed)
+**Current Checkpoint**: Phase 5.9 — Response Time & Speed-Weighted Psychometric Updates (Completed)
 
 ### Completed Milestones
 - **Phase 1 (Foundation)**: Next.js 16 App Router, Tailwind CSS, shadcn/ui, Lucide Icons, Framer Motion, Recharts, Geist typography.
@@ -52,28 +52,41 @@
   - Refined `selectNextQuestion` in `src/lib/adaptive-engine.ts` with continuous distance tiering and session-level topic balancing for Mixed assessments.
   - Implemented deterministic multi-topic rotation: tracks topic frequency in the active session and prioritizes least-represented topics among candidates at optimal difficulty.
   - Added robust handling for sparse candidate pools and difficulty region exhaustion.
+- **Phase 5.9 (Response Time & Speed-Weighted Psychometric Updates)**:
+  - Implemented bounded response-time psychometric weighting in `updateAbility`:
+    $$E = \frac{1}{1 + 10^{-(\theta - d) / 40}}$$
+    $$\text{timeRatio} = \text{clamp}\left(\frac{\text{timeRemainingSec}}{\text{totalTimeSec}}, 0, 1\right)$$
+    $$w_t = \begin{cases} 1.0 + 0.20 \times \text{timeRatio} & \text{if correct} \\ 1.0 + 0.15 \times \text{timeRatio} & \text{if incorrect / timeout} \end{cases}$$
+    $$\Delta\theta = 15 \cdot (y - E) \cdot w_t$$
+    $$\theta_{\text{next}} = \text{round}\Big(\text{clamp}(\theta + \Delta\theta, 5, 100), 1\Big)$$
+  - Integrated `clampedTimeRemaining` and `TIMER_SECONDS` into `submitQuestionAnswer` server action in `src/lib/actions/assessment.ts`.
+  - Maintained backward compatibility (omitted time parameters default to $w_t = 1.0$).
+  - Verified game scoring / speed bonus remains completely separate (`score = 100 + floor(25 * timeRemaining / 90)`).
 
-### Files Changed in Phase 5.8
-- `src/lib/adaptive-engine.ts` (refined `selectNextQuestion` with proximity candidate tiering and Mixed session topic balancing)
-- `PROJECT_SPEC.md` (documented selection algorithm, topic balancing, tests, and limitations)
+### Files Changed in Phase 5.9
+- `src/lib/adaptive-engine.ts` (extended `updateAbility` with bounded speed-weighting multiplier $w_t$)
+- `src/lib/actions/assessment.ts` (passed `clampedTimeRemaining` and `TIMER_SECONDS` to `updateAbility`)
+- `PROJECT_SPEC.md` (documented Phase 5.9 mathematical formula, tests, and limitations)
 
-### Tests Performed (Phase 5.8)
+### Tests Performed (Phase 5.9)
 - `npm run build`: Production build and TypeScript validation passed with 0 errors.
 - Deterministic Validation Suite:
-  1. Centroid targeting across 15, 30, 50, 70, 88.
-  2. Strict used-question exclusion (`usedIds` no-repeat guard).
-  3. Single-topic filtering strictly enforced (e.g. topic = 'OS').
-  4. Mixed assessment multi-topic rotation: verified all 4 distinct topics (DSA, DBMS, OS, CN) are covered across the first 4 questions of a Mixed session.
-  5. Exhaustion fallback: verified graceful transition to adjacent difficulty bands when primary level is exhausted.
-  6. Sparse candidate pool robustness: tested pools with missing intermediate difficulty levels.
-  7. End-to-end multi-step assessment lifecycle test via Server Actions: verified continuous ability transitions, topic rotation, response persistence, and idempotent duplicate submission protection.
+  1. Fast correct ($\theta=50, d=50, 85\text{s}/90\text{s}$): $58.9$ (gain $+8.9$).
+  2. Slow correct ($\theta=50, d=50, 5\text{s}/90\text{s}$): $57.6$ (gain $+7.6$).
+  3. Fast incorrect/rash guess ($\theta=50, d=50, 85\text{s}/90\text{s}$): $41.4$ (penalty $-8.6$).
+  4. Slow incorrect/thoughtful miss ($\theta=50, d=50, 5\text{s}/90\text{s}$): $42.4$ (penalty $-7.6$).
+  5. Timeout ($\theta=50, d=50, 0\text{s}/90\text{s}$): $42.5$ (baseline penalty $-7.5$, bonus $0$).
+  6. Omitted legacy time parameters: backward compatible $57.5$ / $42.5$ ($w_t = 1.0$).
+  7. Boundary clamping: $[5.0, 100.0]$ strictly enforced.
+  8. Speed bonus scoring formula verified unchanged.
+  9. Server action response persistence: verified `time_remaining_sec`, `time_taken_sec`, `speed_bonus`, and `ability_after` in DB responses.
 
 ### Known Limitations
-- Response time weighting in ability updates is deferred to Phase 5.9.
-- Question calibration from aggregate student responses is deferred to Phase 5.9+.
+- Collective question calibration from aggregate student responses across multiple sessions belongs to Phase 5.10 / IRT calibration.
+- AI narrative generation belongs to Phase 6.
 
 ### Next Planned Phase
-- **Phase 5.9**: Response Time & Speed-Weighted Psychometric Updates.
+- **Phase 6**: Gemini AI Integration — Student Performance Analysis Narrative, AI Question Generation Pipeline, Explanation Enhancement.
 
 ---
 
