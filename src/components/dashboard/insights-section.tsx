@@ -1,35 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, AlertTriangle, Lightbulb } from "lucide-react";
-import {
-  getStoredAssessments,
-  calculateTopicAnalytics,
-  calculateInsights,
-  StrengthOrWeakness,
-} from "@/lib/assessment-storage";
+import { useDashboard } from "@/lib/dashboard-context";
 
 export function InsightsSection() {
-  const [strengths, setStrengths] = useState<StrengthOrWeakness[]>([]);
-  const [areasToImprove, setAreasToImprove] = useState<StrengthOrWeakness[]>([]);
-  const [hasAssessments, setHasAssessments] = useState(false);
+  const { data } = useDashboard();
 
-  useEffect(() => {
-    const asmts = getStoredAssessments();
-    if (asmts.length > 0) {
-      setHasAssessments(true);
-      const topicStats = calculateTopicAnalytics(asmts);
-      const { strengths: s, areasToImprove: a } = calculateInsights(topicStats);
-      setStrengths(s);
-      setAreasToImprove(a);
-    } else {
-      setHasAssessments(false);
-      setStrengths([]);
-      setAreasToImprove([]);
-    }
-  }, []);
+  const hasData = Boolean(data?.hasData);
+  const strengths = data?.strengths || [];
+  const areasToImprove = data?.areasToImprove || [];
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -48,7 +29,7 @@ export function InsightsSection() {
             </Badge>
           </div>
 
-          {!hasAssessments ? (
+          {!hasData ? (
             <div className="py-6 text-center space-y-1">
               <p className="text-xs font-semibold text-foreground">No Strength Data Yet</p>
               <p className="text-xs text-muted-foreground">
@@ -89,7 +70,7 @@ export function InsightsSection() {
             </Badge>
           </div>
 
-          {!hasAssessments ? (
+          {!hasData ? (
             <div className="py-6 text-center space-y-1">
               <p className="text-xs font-semibold text-foreground">No Diagnostic Data Yet</p>
               <p className="text-xs text-muted-foreground">

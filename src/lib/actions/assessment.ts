@@ -41,7 +41,7 @@ import type { AssessmentQuestion } from "@/lib/mock-data";
 /**
  * Authenticate the student from SSR session cookies.
  */
-async function getAuthenticatedStudent(): Promise<{ id: string; email?: string } | null> {
+export async function getAuthenticatedStudent(): Promise<{ id: string; email?: string } | null> {
   try {
     const cookieStore = await cookies();
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

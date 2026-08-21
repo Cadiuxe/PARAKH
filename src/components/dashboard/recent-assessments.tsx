@@ -1,24 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, ArrowRight, FileText } from "lucide-react";
-import {
-  getStoredAssessments,
-  CompletedAssessment,
-} from "@/lib/assessment-storage";
+import { useDashboard } from "@/lib/dashboard-context";
 import Link from "next/link";
 
 export function RecentAssessments() {
-  const [assessments, setAssessments] = useState<CompletedAssessment[]>([]);
+  const { data } = useDashboard();
 
-  useEffect(() => {
-    setAssessments(getStoredAssessments());
-  }, []);
-
-  const hasData = assessments.length > 0;
+  const hasData = Boolean(data?.hasData);
+  const recentSessions = data?.recentSessions || [];
 
   return (
     <Card className="p-6 border border-border/80 bg-card shadow-md flex flex-col justify-between h-full">
@@ -56,7 +49,7 @@ export function RecentAssessments() {
         </div>
       ) : (
         <div className="space-y-3">
-          {assessments.slice(0, 4).map((item) => (
+          {recentSessions.map((item) => (
             <Link
               key={item.id}
               href={`/results?id=${item.id}`}

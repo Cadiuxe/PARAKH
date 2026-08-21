@@ -1,48 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
-import {
-  getStoredAssessments,
-  getLatestAssessment,
-  CompletedAssessment,
-} from "@/lib/assessment-storage";
+import { useDashboard } from "@/lib/dashboard-context";
 
 export function AbilityChart() {
-  const [assessments, setAssessments] = useState<CompletedAssessment[]>([]);
+  const { data } = useDashboard();
 
-  useEffect(() => {
-    setAssessments(getStoredAssessments());
-  }, []);
-
-  const hasData = assessments.length > 0;
-  const latest = getLatestAssessment();
-
-  // Build chart points from real data
-  let chartData: { label: string; ability: number; topic?: string }[] = [];
-  let chartSubtitle = "Real ability progression derived from completed sessions.";
-
-  if (hasData) {
-    if (assessments.length === 1 && latest) {
-      // 1 assessment completed: show question-by-question progression of that session
-      chartSubtitle = `Question-by-question ability trajectory for latest ${latest.topic} session.`;
-      chartData = latest.results.map((r, idx) => ({
-        label: `Q${idx + 1}`,
-        ability: r.abilityAfter,
-        topic: r.question.topic,
-      }));
-    } else {
-      // Multiple assessments completed: show session-by-session final ability progression (oldest to newest)
-      chartSubtitle = `Ability progression across your last ${assessments.length} completed sessions.`;
-      const sorted = [...assessments].reverse(); // reverse so oldest is first
-      chartData = sorted.map((a, idx) => ({
-        label: `S${idx + 1} (${a.topic})`,
-        ability: a.abilityFinal,
-        topic: a.topic,
-      }));
-    }
-  }
+  const hasData = Boolean(data?.hasData);
+  const chartData = data?.chartData || [];
+  const chartSubtitle = data?.chartSubtitle || "Real ability progression derived from completed sessions.";
 
   return (
     <Card className="p-6 border border-border/80 bg-card shadow-md flex flex-col justify-between h-full">

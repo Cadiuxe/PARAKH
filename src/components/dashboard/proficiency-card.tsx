@@ -1,34 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import {
-  getStoredAssessments,
-  getLatestAssessment,
-  getAbilityLevelLabel,
-  CompletedAssessment,
-} from "@/lib/assessment-storage";
+import { useDashboard } from "@/lib/dashboard-context";
 
 export function ProficiencyCard() {
-  const [assessments, setAssessments] = useState<CompletedAssessment[]>([]);
+  const { data } = useDashboard();
 
-  useEffect(() => {
-    setAssessments(getStoredAssessments());
-  }, []);
-
-  const hasData = assessments.length > 0;
-  const latest = getLatestAssessment();
-
-  const totalSessions = assessments.length;
-  const totalQuestions = assessments.reduce((s, a) => s + a.questionCount, 0);
-  const avgProficiency = hasData
-    ? Math.round(assessments.reduce((s, a) => s + a.percentageScore, 0) / assessments.length)
-    : 0;
-
-  const currentAbilityLabel = latest
-    ? getAbilityLevelLabel(latest.abilityFinal)
-    : "Not Assessed";
+  const hasData = Boolean(data?.hasData);
+  const totalSessions = data?.totalSessions || 0;
+  const totalQuestions = data?.totalQuestions || 0;
+  const avgProficiency = data?.avgProficiency || 0;
+  const currentAbilityLabel = data?.currentAbilityLabel || "Not Assessed";
+  const currentAbility = data?.currentAbility || 50;
 
   return (
     <Card className="relative overflow-hidden border border-border/80 bg-card p-6 shadow-md flex flex-col gap-4">
@@ -50,7 +34,7 @@ export function ProficiencyCard() {
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">Estimated Ability</span>
             <span className="font-semibold text-indigo-400">
-              {hasData ? `${currentAbilityLabel} (${latest?.abilityFinal})` : "Not Assessed"}
+              {hasData ? `${currentAbilityLabel} (${currentAbility})` : "Not Assessed"}
             </span>
           </div>
           <Progress value={avgProficiency} className="h-2 bg-muted" />

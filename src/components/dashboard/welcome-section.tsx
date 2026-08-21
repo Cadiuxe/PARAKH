@@ -1,39 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Play } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import {
-  getStoredAssessments,
-  getLatestAssessment,
-  getAbilityLevelLabel,
-  CompletedAssessment,
-} from "@/lib/assessment-storage";
+import { useDashboard } from "@/lib/dashboard-context";
 
 export function WelcomeSection() {
   const { user, profile } = useAuth();
-  const [assessments, setAssessments] = useState<CompletedAssessment[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    setAssessments(getStoredAssessments());
-    setIsLoaded(true);
-  }, []);
+  const { data } = useDashboard();
 
   const displayName = profile?.full_name || user?.email?.split("@")[0] || "Student";
-  const hasData = assessments.length > 0;
-  const latest = getLatestAssessment();
-
-  const avgProficiency = hasData
-    ? Math.round(assessments.reduce((s, a) => s + a.percentageScore, 0) / assessments.length)
-    : 0;
-
-  const currentAbilityLabel = latest
-    ? getAbilityLevelLabel(latest.abilityFinal)
-    : "Not Assessed";
+  const hasData = Boolean(data?.hasData);
+  const totalSessions = data?.totalSessions || 0;
+  const avgProficiency = data?.avgProficiency || 0;
+  const currentAbilityLabel = data?.currentAbilityLabel || "Not Assessed";
+  const currentAbility = data?.currentAbility || 50;
+  const latestTopic = data?.latestSession?.topic;
 
   return (
     <div className="relative overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-r from-indigo-950/50 via-background to-background p-6 sm:p-8 shadow-lg">
@@ -45,7 +29,7 @@ export function WelcomeSection() {
             variant="outline"
             className="border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs px-2.5 py-0.5"
           >
-            {hasData ? `${assessments.length} Session${assessments.length > 1 ? "s" : ""} Recorded` : "Ready to Start"}
+            {hasData ? `${totalSessions} Session${totalSessions > 1 ? "s" : ""} Recorded` : "Ready to Start"}
           </Badge>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
             Welcome, {displayName}
@@ -55,13 +39,13 @@ export function WelcomeSection() {
               <>
                 Your current ability is{" "}
                 <span className="text-indigo-400 font-semibold">
-                  {currentAbilityLabel} ({latest?.abilityFinal} pts)
+                  {currentAbilityLabel} ({currentAbility} pts)
                 </span>{" "}
                 with an average proficiency of{" "}
                 <span className="text-emerald-400 font-bold">
                   {avgProficiency}%
                 </span>
-                . {latest?.topic} was your most recent session.
+                {latestTopic ? `. ${latestTopic} was your most recent session.` : "."}
               </>
             ) : (
               "Complete your first adaptive assessment to establish your initial ability profile and start tracking your topic proficiency."

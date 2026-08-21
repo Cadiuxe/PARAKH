@@ -1,22 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import {
-  getStoredAssessments,
-  calculateTopicAnalytics,
-  TopicAnalytics,
-} from "@/lib/assessment-storage";
+import { useDashboard } from "@/lib/dashboard-context";
 
 export function TopicCards() {
-  const [topics, setTopics] = useState<TopicAnalytics[]>([]);
+  const { data } = useDashboard();
 
-  useEffect(() => {
-    const asmts = getStoredAssessments();
-    setTopics(calculateTopicAnalytics(asmts));
-  }, []);
+  const topics = data?.topicAnalytics || [];
 
   return (
     <Card className="p-6 border border-border/80 bg-card shadow-md">
