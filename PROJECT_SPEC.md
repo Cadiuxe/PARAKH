@@ -1,18 +1,55 @@
-# PARAKH Adaptive MCQ Testing Platform
+# PARAKH Adaptive MCQ Testing Platform (MULYAN)
 
 > This file is the single source of truth for the project.
 > Read this file before making architectural or implementation decisions.
+>
+> **Canonical Source of Truth Rule**:
+> The Source of Truth is documentation, not permission to redesign the project. Existing implementation takes precedence when the documentation is stale. When documentation and code disagree, stop and report the discrepancy before making architectural changes.
 
 ## Project Status
 
-Current Phase: Phase 0 — Foundation
+**Current Checkpoint**: Phase 5.3 — Assessment Persistence & Server Authority (Completed)
 
-Completed:
-- Project specification created
-- Technology stack selected
+### Completed Milestones
+- **Phase 1 (Foundation)**: Next.js 16 App Router, Tailwind CSS, shadcn/ui, Lucide Icons, Framer Motion, Recharts, Geist typography.
+- **Phase 2 & 4 (UI Prototype & Analytics Dashboard)**: Assessment screen, results analytics, student dashboard, admin question/review queue layout, help, settings.
+- **Phase 5.1 & 5.2 (Supabase SSR Auth & Foundation Schema)**: PostgreSQL schema migration (`profiles`, `topics`, `questions`, `sessions`, `responses`, `ability_estimates`), RLS policies, browser client, server admin client, auth context provider, route proxy.
+- **Phase 5.3 (Assessment Persistence & Server Authority)**:
+  - **Server Authority**: Authenticated student identity validated from SSR cookies. Assessment session ownership enforced.
+  - **Server-Authoritative Evaluation**: Question answers, correctness, base score (100 pts), speed bonus (up to +25 pts), ability recalibration, and completion status evaluated 100% server-side via Next.js Server Actions.
+  - **Security Sanitization**: Client receives `QuestionSafeRow` stripped of `correct_option_index` and `explanation`. Feedback is revealed only after server verification.
+  - **Idempotency & Reconnect**: Safe duplicate submission guards; full support for session restoration on page refresh / reconnect (`getActiveAssessmentSession`).
+  - **Schema Update**: `20240102000000_assessment_in_progress_status.sql` enabled `'in_progress'` status on `sessions`.
 
-Next:
-- Initialize project foundation
+### Files & Schema Changed in Phase 5.3
+- `supabase/migrations/20240102000000_assessment_in_progress_status.sql` (in_progress session status migration)
+- `src/lib/db/types.ts` (updated SessionRow status & insert types)
+- `src/lib/db/questions.ts` (sanitized safe questions, server question retrieval)
+- `src/lib/db/sessions.ts` (session creation, active session lookup, server updates)
+- `src/lib/db/responses.ts` (response row insertion and session query)
+- `src/lib/db/ability.ts` (rolling per-topic ability estimates upsert)
+- `src/lib/actions/assessment.ts` (Next.js Server Actions layer for assessment lifecycle)
+- `src/app/assessment/page.tsx` (connected client UI to server actions, reconnect state, server feedback display)
+
+### Tests Performed
+- `npm run build`: Production build and TypeScript validation passed with 0 errors.
+- Automated & Flow Tests (`scratch/test-assessment-flow.ts`):
+  1. Session creation with SSR auth identity verification.
+  2. Question sanitization security check (no answer key/explanation leakage).
+  3. Active session restoration on refresh/reconnect.
+  4. Server-evaluated answer scoring & speed bonus calculation.
+  5. Duplicate submission guard (idempotent result preservation).
+  6. Multi-question progression and session completion transition.
+  7. Active session cleanup verification.
+
+### Known Limitations
+- Continuous psychometrics (Rasch / 2PL IRT model) and continuous difficulty scaling are intentionally deferred to following phases.
+- Question bank currently uses seeded curated items; AI question generation via Gemini belongs to Phase 6.
+
+### Next Planned Phase
+- **Phase 5.4 / 5.5**: Database-backed Student Dashboard & Results Analytics (hydrating proficiency charts, history, and topic breakdown directly from Supabase `sessions`, `responses`, and `ability_estimates`).
+
+---
 
 ## Core Rule
 

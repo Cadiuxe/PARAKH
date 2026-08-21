@@ -84,7 +84,7 @@ export type SessionRow = {
   ability_start: number;
   ability_final: number;
   ability_delta: number;
-  status: "completed" | "abandoned";
+  status: "in_progress" | "completed" | "abandoned";
   started_at: string;
   completed_at: string | null;
 };
@@ -139,13 +139,42 @@ export type ProfileInsert = {
  * SERVER-ONLY: Used exclusively in Server Actions via the service_role client.
  * Never construct or send this from a browser component.
  */
-export type SessionInsert = Omit<SessionRow, "id">;
+export type SessionInsert = {
+  id?: string;
+  student_id: string;
+  topic_filter: "Mixed" | "DSA" | "DBMS" | "OS" | "CN";
+  requested_count: number;
+  actual_count?: number;
+  correct_count?: number;
+  percentage_score?: number;
+  total_score?: number;
+  total_bonus?: number;
+  ability_start: number;
+  ability_final?: number;
+  ability_delta?: number;
+  status?: "in_progress" | "completed" | "abandoned";
+  started_at?: string;
+  completed_at?: string | null;
+};
 
-/**
- * SERVER-ONLY: Used exclusively in Server Actions via the service_role client.
- * Never construct or send this from a browser component.
- */
-export type ResponseInsert = Omit<ResponseRow, "id" | "answered_at">;
+export type ResponseInsert = {
+  id?: string;
+  session_id: string;
+  question_id: string;
+  question_order: number;
+  topic_code: string;
+  difficulty_level: number;
+  selected_option_index: number;
+  is_correct: boolean;
+  time_remaining_sec: number;
+  time_taken_sec: number;
+  ability_before: number;
+  ability_after: number;
+  base_score: number;
+  speed_bonus: number;
+  total_score: number;
+  answered_at?: string;
+};
 
 export type AbilityEstimateInsert = {
   id?: string;
