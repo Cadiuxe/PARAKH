@@ -38,6 +38,8 @@ import {
 } from "@/lib/assessment-storage";
 import {
   startAssessmentSession,
+  getDiagnosticQuiz,
+  startAssessmentWithDiagnostic,
   submitQuestionAnswer,
   getActiveAssessmentSession,
   abandonAssessmentSession,
@@ -48,7 +50,14 @@ import type { QuestionSafeRow } from "@/lib/db/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = "loading" | "setup" | "question" | "complete";
+type Phase =
+  | "loading"
+  | "setup"
+  | "diagnostic_self"
+  | "diagnostic_quiz"
+  | "diagnostic_calibrating"
+  | "question"
+  | "complete";
 
 interface ClientQuestionView {
   id: string;
@@ -223,7 +232,7 @@ function SetupScreen({
           {isLoading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Initializing Session…
+              Preparing Calibration Quiz…
             </>
           ) : (
             <>
@@ -233,6 +242,223 @@ function SetupScreen({
           )}
         </Button>
       </Card>
+    </div>
+  );
+}
+
+// ─── Pre-Assessment: Self-Assessment Screen ──────────────────────────────────
+
+function SelfAssessmentScreen({
+  topic,
+  onProceed,
+  onSkip,
+}: {
+  topic: string;
+  onProceed: (tier: string) => void;
+  onSkip: () => void;
+}) {
+  const [selectedTier, setSelectedTier] = useState<string>("intermediate");
+
+  const tiers = [
+    { id: "novice", title: "Novice", desc: "Brand new to this topic; little to no prior exposure." },
+    { id: "beginner", title: "Beginner", desc: "Know the core fundamentals and basic syntax." },
+    { id: "intermediate", title: "Intermediate", desc: "Comfortable solving standard textbook problems." },
+    { id: "proficient", title: "Proficient", desc: "Strong conceptual grasp and good problem-solving speed." },
+    { id: "advanced", title: "Advanced", desc: "Deep mastery, edge cases, and competitive-level fluency." },
+  ];
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6 py-4">
+      <div className="text-center space-y-2">
+        <Badge className="bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+          Step 1 of 2: Self-Calibration
+        </Badge>
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+          How familiar are you with {topic === "Mixed" ? "these CS topics" : topic}?
+        </h1>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto">
+          Your response helps calibrate the initial question difficulty. It will be verified by 5 quick diagnostic questions.
+        </p>
+      </div>
+
+      <Card className="p-6 border border-border/80 bg-card shadow-md space-y-4">
+        <div className="space-y-2.5">
+          {tiers.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setSelectedTier(t.id)}
+              className={`w-full text-left p-3.5 rounded-xl border transition-all flex items-center justify-between ${
+                selectedTier === t.id
+                  ? "bg-indigo-600/15 border-indigo-500 text-foreground ring-1 ring-indigo-500/50 shadow-sm"
+                  : "border-border/60 hover:border-indigo-500/40 bg-muted/20 text-muted-foreground"
+              }`}
+            >
+              <div>
+                <p className="font-semibold text-sm text-foreground">{t.title}</p>
+                <p className="text-xs text-muted-foreground">{t.desc}</p>
+              </div>
+              <div
+                className={`h-4 w-4 rounded-full border flex items-center justify-center ${
+                  selectedTier === t.id ? "border-indigo-500 bg-indigo-600" : "border-muted-foreground/40"
+                }`}
+              >
+                {selectedTier === t.id && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-border/40">
+          <Button
+            variant="outline"
+            onClick={onSkip}
+            className="flex-1 border-border/70 text-muted-foreground hover:text-foreground"
+          >
+            Skip Self-Rating
+          </Button>
+          <Button
+            onClick={() => onProceed(selectedTier)}
+            className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold gap-2 shadow-md shadow-indigo-600/20"
+          >
+            Continue to 5 Diagnostic Questions
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Pre-Assessment: 5 Diagnostic Questions Screen ───────────────────────────
+
+function DiagnosticQuizScreen({
+  questions,
+  currentIndex,
+  onAnswer,
+  isCalibrating,
+}: {
+  questions: ClientQuestionView[];
+  currentIndex: number;
+  onAnswer: (questionId: string, optionIndex: number) => void;
+  isCalibrating: boolean;
+}) {
+  const currentQ = questions[currentIndex];
+  const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
+
+  useEffect(() => {
+    setSelectedOpt(null);
+  }, [currentIndex]);
+
+  const handleNext = () => {
+    if (selectedOpt === null || !currentQ) return;
+    onAnswer(currentQ.id, selectedOpt);
+  };
+
+  if (!currentQ) return null;
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-6 py-4">
+      {/* Header */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              Pre-Assessment Diagnostic
+            </Badge>
+            <span className="font-semibold text-foreground">
+              Question {currentIndex + 1} of 5
+            </span>
+          </div>
+          <span className="text-muted-foreground">
+            {Math.round(((currentIndex + 1) / 5) * 100)}%
+          </span>
+        </div>
+        <Progress value={((currentIndex + 1) / 5) * 100} className="h-1.5" />
+      </div>
+
+      <Card className="p-6 border border-border/80 bg-card shadow-md space-y-6">
+        <div className="flex items-center justify-between border-b border-border/40 pb-3">
+          <Badge variant="outline" className="text-xs">
+            {currentQ.topic} · {currentQ.subtopic}
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            Baseline Calibration
+          </span>
+        </div>
+
+        <h2 className="text-base sm:text-lg font-semibold text-foreground leading-relaxed">
+          {currentQ.questionText}
+        </h2>
+
+        {/* Options */}
+        <div className="space-y-2.5">
+          {currentQ.options.map((opt, idx) => (
+            <button
+              key={idx}
+              disabled={isCalibrating}
+              onClick={() => setSelectedOpt(idx)}
+              className={`w-full text-left p-3.5 rounded-xl border text-sm transition-all flex items-center gap-3 ${
+                selectedOpt === idx
+                  ? "bg-indigo-600/20 border-indigo-500 text-foreground ring-1 ring-indigo-500/50 shadow-sm"
+                  : "border-border/60 hover:border-indigo-500/40 bg-muted/20 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span
+                className={`h-6 w-6 rounded-lg text-xs font-bold flex items-center justify-center border shrink-0 ${
+                  selectedOpt === idx
+                    ? "bg-indigo-600 border-indigo-500 text-white"
+                    : "border-border bg-background text-muted-foreground"
+                }`}
+              >
+                {String.fromCharCode(65 + idx)}
+              </span>
+              <span className="leading-snug">{opt}</span>
+            </button>
+          ))}
+        </div>
+
+        <Button
+          onClick={handleNext}
+          disabled={selectedOpt === null || isCalibrating}
+          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold h-11 text-sm shadow-md shadow-indigo-600/20 gap-2"
+        >
+          {isCalibrating ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Calibrating Starting Ability…
+            </>
+          ) : currentIndex === 4 ? (
+            <>
+              <CheckCircle2 className="h-4 w-4" />
+              Complete Diagnostic &amp; Start Test
+            </>
+          ) : (
+            <>
+              <span>Next Diagnostic Question</span>
+              <ArrowRight className="h-4 w-4" />
+            </>
+          )}
+        </Button>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Pre-Assessment: Calibrating Screen ──────────────────────────────────────
+
+function CalibratingScreen() {
+  return (
+    <div className="max-w-md mx-auto text-center space-y-6 py-20">
+      <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 mx-auto animate-pulse">
+        <BrainCircuit className="h-8 w-8" />
+      </div>
+      <div className="space-y-2">
+        <h2 className="text-xl font-bold text-foreground">Calibrating Adaptive Engine</h2>
+        <p className="text-xs text-muted-foreground">
+          Synthesizing diagnostic responses, self-assessment priors, and historical metrics to establish your baseline...
+        </p>
+      </div>
+      <Loader2 className="h-6 w-6 animate-spin mx-auto text-indigo-400" />
     </div>
   );
 }
@@ -733,6 +959,16 @@ export default function AssessmentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Pre-Assessment Diagnostic State
+  const [pendingTopic, setPendingTopic] = useState<string>("Mixed");
+  const [pendingCount, setPendingCount] = useState<number>(5);
+  const [selfAssessmentTier, setSelfAssessmentTier] = useState<string | null>(null);
+  const [diagnosticQuestions, setDiagnosticQuestions] = useState<ClientQuestionView[]>([]);
+  const [diagnosticIndex, setDiagnosticIndex] = useState<number>(0);
+  const [diagnosticAnswers, setDiagnosticAnswers] = useState<
+    Array<{ questionId: string; selectedOptionIndex: number }>
+  >([]);
+
   // 1. On Mount: Check for active assessment session to resume upon refresh/reconnect
   useEffect(() => {
     let isMounted = true;
@@ -762,32 +998,99 @@ export default function AssessmentPage() {
     };
   }, []);
 
-  // 2. Start Assessment
+  // 2. Start Assessment Setup -> Pre-Assessment
   const handleStart = async (topic: string, count: number) => {
     setIsStarting(true);
     setErrorMsg(null);
 
     try {
-      const res = await startAssessmentSession(topic, count);
-      if (res.success) {
-        setSessionId(res.sessionId);
-        setSelectedTopic(res.topic);
-        setTotalCount(res.requestedCount);
-        setAbility(res.initialAbility);
-        setAbilityStart(res.initialAbility);
-        setQuestionIndex(0);
-        setCurrentQuestion(mapSafeToView(res.firstQuestion));
-        setNextQuestionBuffered(null);
-        setServerFeedback(null);
-        setCompletedSummary(null);
-        setPhase("question");
+      const diagRes = await getDiagnosticQuiz(topic);
+      if (diagRes.success && diagRes.questions.length >= 5) {
+        setDiagnosticQuestions(diagRes.questions.map(mapSafeToView));
+        setPendingTopic(topic);
+        setPendingCount(count);
+        setDiagnosticAnswers([]);
+        setDiagnosticIndex(0);
+        setSelfAssessmentTier(null);
+        setPhase("diagnostic_self");
       } else {
-        setErrorMsg(res.error || "Failed to start assessment.");
+        // Fallback directly to adaptive session if diagnostic quiz fails
+        const res = await startAssessmentSession(topic, count);
+        if (res.success) {
+          setSessionId(res.sessionId);
+          setSelectedTopic(res.topic);
+          setTotalCount(res.requestedCount);
+          setAbility(res.initialAbility);
+          setAbilityStart(res.initialAbility);
+          setQuestionIndex(0);
+          setCurrentQuestion(mapSafeToView(res.firstQuestion));
+          setNextQuestionBuffered(null);
+          setServerFeedback(null);
+          setCompletedSummary(null);
+          setPhase("question");
+        } else {
+          setErrorMsg(res.error || "Failed to start assessment.");
+        }
       }
     } catch (err: any) {
       setErrorMsg(err?.message || "An unexpected error occurred.");
     } finally {
       setIsStarting(false);
+    }
+  };
+
+  // Pre-Assessment Step 1: Self-Assessment Proceed / Skip
+  const handleSelfAssessmentProceed = (tier: string) => {
+    setSelfAssessmentTier(tier);
+    setPhase("diagnostic_quiz");
+  };
+
+  const handleSelfAssessmentSkip = () => {
+    setSelfAssessmentTier(null);
+    setPhase("diagnostic_quiz");
+  };
+
+  // Pre-Assessment Step 2: Diagnostic Questions Answer & Calibration
+  const handleDiagnosticAnswer = async (questionId: string, optionIndex: number) => {
+    const updatedAnswers = [
+      ...diagnosticAnswers,
+      { questionId, selectedOptionIndex: optionIndex },
+    ];
+    setDiagnosticAnswers(updatedAnswers);
+
+    if (diagnosticIndex < 4) {
+      setDiagnosticIndex(diagnosticIndex + 1);
+    } else {
+      // Finished 5th diagnostic question -> Calibrate on server
+      setPhase("diagnostic_calibrating");
+      try {
+        const res = await startAssessmentWithDiagnostic({
+          topic: pendingTopic,
+          count: pendingCount,
+          selfAssessmentTier,
+          diagnosticAnswers: updatedAnswers,
+        });
+
+        if (res.success) {
+          setSessionId(res.sessionId);
+          setSelectedTopic(res.topic);
+          setTotalCount(res.requestedCount);
+          setAbility(res.initialAbility);
+          setAbilityStart(res.initialAbility);
+          setQuestionIndex(0);
+          setCurrentQuestion(mapSafeToView(res.firstQuestion));
+          setNextQuestionBuffered(null);
+          setServerFeedback(null);
+          setCompletedSummary(null);
+          setPhase("question");
+        } else {
+          setErrorMsg(res.error || "Calibration failed.");
+          setPhase("setup");
+        }
+      } catch (err: any) {
+        setErrorMsg(err?.message || "Calibration failed.");
+        setPhase("setup");
+      }
     }
   };
 
@@ -868,10 +1171,10 @@ export default function AssessmentPage() {
             setNextQuestionBuffered(mapSafeToView(res.nextQuestion));
           }
         } else {
-          setErrorMsg(res.error || "Failed to submit answer.");
+          setErrorMsg(res.error || "Submission failed.");
         }
       } catch (err: any) {
-        setErrorMsg(err?.message || "Failed to communicate with server.");
+        setErrorMsg(err?.message || "An unexpected error occurred.");
       } finally {
         setIsSubmitting(false);
       }
@@ -879,14 +1182,11 @@ export default function AssessmentPage() {
     [currentQuestion, sessionId, isSubmitting]
   );
 
-  // 4. Advance to Next Question
+  // 4. Proceed to Next Question
   const handleProceedNext = useCallback(() => {
     if (completedSummary) {
       setPhase("complete");
-      return;
-    }
-
-    if (nextQuestionBuffered) {
+    } else if (nextQuestionBuffered) {
       setCurrentQuestion(nextQuestionBuffered);
       setNextQuestionBuffered(null);
       setServerFeedback(null);
@@ -908,6 +1208,9 @@ export default function AssessmentPage() {
     setQuestionIndex(0);
     setAbility(INITIAL_ABILITY);
     setAbilityStart(INITIAL_ABILITY);
+    setDiagnosticAnswers([]);
+    setDiagnosticIndex(0);
+    setSelfAssessmentTier(null);
     setErrorMsg(null);
   };
 

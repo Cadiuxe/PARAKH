@@ -28,11 +28,14 @@ import {
   insertResponse,
   getSessionResponses,
 } from "@/lib/db/responses";
-import { upsertAbilityEstimates } from "@/lib/db/ability";
+import { upsertAbilityEstimates, getStudentAbility } from "@/lib/db/ability";
 import {
   selectNextQuestion,
   updateAbility,
   questionScore,
+  getDiagnosticQuestions,
+  calculateDiagnosticAbility,
+  calculateAbilityPrior,
   INITIAL_ABILITY,
   TIMER_SECONDS,
 } from "@/lib/adaptive-engine";
@@ -99,8 +102,137 @@ export type StartSessionResult =
       error: string;
     };
 
+export type DiagnosticQuizResult =
+  | {
+      success: true;
+      questions: QuestionSafeRow[];
+    }
+  | {
+      success: false;
+      error: string;
+    };
+
 /**
- * Start a new server-authoritative assessment session.
+ * Fetch the 5 safe diagnostic questions for pre-assessment calibration.
+ */
+export async function getDiagnosticQuiz(topic: string): Promise<DiagnosticQuizResult> {
+  const validTopics = ["Mixed", "DSA", "DBMS", "OS", "CN"];
+  const topicFilter = validTopics.includes(topic) ? topic : "Mixed";
+
+  const pool = await fetchApprovedQuestions(topicFilter);
+  const diagQuestions = getDiagnosticQuestions(topicFilter, pool);
+
+  if (diagQuestions.length < 5) {
+    return { success: false, error: "Insufficient diagnostic questions available." };
+  }
+
+  return {
+    success: true,
+    questions: diagQuestions.map(toSafeQuestion),
+  };
+}
+
+export interface DiagnosticAnswerSubmission {
+  questionId: string;
+  selectedOptionIndex: number;
+}
+
+export interface StartWithDiagnosticParams {
+  topic: string;
+  count: number;
+  selfAssessmentTier?: string | null;
+  diagnosticAnswers: DiagnosticAnswerSubmission[];
+}
+
+/**
+ * Server-authoritatively evaluate the 5 diagnostic answers, calculate the student's ability prior,
+ * and start the main adaptive assessment.
+ */
+export async function startAssessmentWithDiagnostic(
+  params: StartWithDiagnosticParams
+): Promise<StartSessionResult> {
+  const student = await getAuthenticatedStudent();
+  if (!student) {
+    return { success: false, error: "Unauthorized: Please log in to begin an assessment." };
+  }
+
+  const validTopics = ["Mixed", "DSA", "DBMS", "OS", "CN"];
+  const topicFilter = validTopics.includes(params.topic) ? (params.topic as any) : "Mixed";
+  const requestedCount = [5, 10, 15].includes(params.count) ? params.count : 5;
+
+  // 1. Evaluate diagnostic questions server-side
+  const diagnosticResults: Array<{ isCorrect: boolean; difficultyScore: number }> = [];
+  const diagnosticQuestionIds = new Set<string>();
+
+  for (const ans of params.diagnosticAnswers) {
+    diagnosticQuestionIds.add(ans.questionId);
+    const q = await fetchQuestionById(ans.questionId);
+    if (q) {
+      const isCorrect =
+        ans.selectedOptionIndex !== -1 && ans.selectedOptionIndex === q.correctOptionIndex;
+      diagnosticResults.push({
+        isCorrect,
+        difficultyScore: q.difficultyScore,
+      });
+    }
+  }
+
+  // 2. Compute diagnostic ability (15–88)
+  const diagnosticAbility = calculateDiagnosticAbility(diagnosticResults);
+
+  // 3. Fetch historical ability for this student (if returning student)
+  let historicalAbility: number | null = null;
+  if (student.id) {
+    const historicalEstimates = await getStudentAbility(student.id);
+    if (topicFilter === "Mixed") {
+      if (historicalEstimates.length > 0) {
+        const sum = historicalEstimates.reduce((acc, est) => acc + est.ability, 0);
+        historicalAbility = sum / historicalEstimates.length;
+      }
+    } else {
+      const topicEst = historicalEstimates.find((e) => e.topic_id === topicFilter);
+      if (topicEst) {
+        historicalAbility = topicEst.ability;
+      }
+    }
+  }
+
+  // 4. Compute overall calibrated ability prior (with shrinkage)
+  const startingAbility = calculateAbilityPrior({
+    diagnosticAbility,
+    selfAssessmentTier: params.selfAssessmentTier,
+    historicalAbility,
+  });
+
+  // 5. Select Question 1 of the main adaptive assessment (excluding diagnostic questions)
+  const pool = await fetchApprovedQuestions(topicFilter);
+  const firstQuestion = selectNextQuestion(startingAbility, diagnosticQuestionIds, topicFilter, pool);
+
+  if (!firstQuestion) {
+    return { success: false, error: "No questions available for the selected topic." };
+  }
+
+  // 6. Create database session record with computed ability_start
+  const session = await createSession({
+    student_id: student.id,
+    topic_filter: topicFilter,
+    requested_count: requestedCount,
+    ability_start: startingAbility,
+    status: "in_progress",
+  });
+
+  return {
+    success: true,
+    sessionId: session.id,
+    topic: topicFilter,
+    requestedCount,
+    initialAbility: startingAbility,
+    firstQuestion: toSafeQuestion(firstQuestion),
+  };
+}
+
+/**
+ * Start a new server-authoritative assessment session (legacy direct start).
  */
 export async function startAssessmentSession(
   topic: string,

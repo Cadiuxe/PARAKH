@@ -8,7 +8,7 @@
 
 ## Project Status
 
-**Current Checkpoint**: Phase 5.9 — Response Time & Speed-Weighted Psychometric Updates (Completed)
+**Current Checkpoint**: Phase 5.10 — Pre-Assessment / Ability Prior (Completed)
 
 ### Completed Milestones
 - **Phase 1 (Foundation)**: Next.js 16 App Router, Tailwind CSS, shadcn/ui, Lucide Icons, Framer Motion, Recharts, Geist typography.
@@ -60,29 +60,33 @@
     $$\Delta\theta = 15 \cdot (y - E) \cdot w_t$$
     $$\theta_{\text{next}} = \text{round}\Big(\text{clamp}(\theta + \Delta\theta, 5, 100), 1\Big)$$
   - Integrated `clampedTimeRemaining` and `TIMER_SECONDS` into `submitQuestionAnswer` server action in `src/lib/actions/assessment.ts`.
-  - Maintained backward compatibility (omitted time parameters default to $w_t = 1.0$).
-  - Verified game scoring / speed bonus remains completely separate (`score = 100 + floor(25 * timeRemaining / 90)`).
+- **Phase 5.10 (Pre-Assessment & Diagnostic Ability Prior)**:
+  - Added 5-question diagnostic calibration quiz with deliberate difficulty spread (Levels 1–5).
+  - Implemented Bayesian shrinkage prior calculation in `src/lib/adaptive-engine.ts` (`calculateDiagnosticAbility`, `calculateAbilityPrior`).
+  - Added Server Actions `getDiagnosticQuiz` and `startAssessmentWithDiagnostic` in `src/lib/actions/assessment.ts`.
+  - Added clean UI workflow with self-assessment rating screen, 5-question diagnostic quiz screen, and transition to main adaptive test.
+  - Guaranteed clean separation: diagnostic items do not count toward requested question count and do not pollute main session responses.
+  - Guaranteed no-repeat behavior: diagnostic item IDs are registered in `usedIds` for the main session.
 
-### Files Changed in Phase 5.9
-- `src/lib/adaptive-engine.ts` (extended `updateAbility` with bounded speed-weighting multiplier $w_t$)
-- `src/lib/actions/assessment.ts` (passed `clampedTimeRemaining` and `TIMER_SECONDS` to `updateAbility`)
-- `PROJECT_SPEC.md` (documented Phase 5.9 mathematical formula, tests, and limitations)
+### Files Changed in Phase 5.10
+- `src/lib/adaptive-engine.ts` (added `getDiagnosticQuestions`, `calculateDiagnosticAbility`, `calculateAbilityPrior`, `SELF_ASSESSMENT_ANCHORS`)
+- `src/lib/actions/assessment.ts` (added `getDiagnosticQuiz`, `startAssessmentWithDiagnostic`)
+- `src/app/assessment/page.tsx` (added `SelfAssessmentScreen`, `DiagnosticQuizScreen`, `CalibratingScreen`, and pre-assessment state transitions)
+- `PROJECT_SPEC.md` (documented Phase 5.10 specifications, formulas, lifecycle, tests, and limitations)
 
-### Tests Performed (Phase 5.9)
+### Tests Performed (Phase 5.10)
 - `npm run build`: Production build and TypeScript validation passed with 0 errors.
 - Deterministic Validation Suite:
-  1. Fast correct ($\theta=50, d=50, 85\text{s}/90\text{s}$): $58.9$ (gain $+8.9$).
-  2. Slow correct ($\theta=50, d=50, 5\text{s}/90\text{s}$): $57.6$ (gain $+7.6$).
-  3. Fast incorrect/rash guess ($\theta=50, d=50, 85\text{s}/90\text{s}$): $41.4$ (penalty $-8.6$).
-  4. Slow incorrect/thoughtful miss ($\theta=50, d=50, 5\text{s}/90\text{s}$): $42.4$ (penalty $-7.6$).
-  5. Timeout ($\theta=50, d=50, 0\text{s}/90\text{s}$): $42.5$ (baseline penalty $-7.5$, bonus $0$).
-  6. Omitted legacy time parameters: backward compatible $57.5$ / $42.5$ ($w_t = 1.0$).
-  7. Boundary clamping: $[5.0, 100.0]$ strictly enforced.
-  8. Speed bonus scoring formula verified unchanged.
-  9. Server action response persistence: verified `time_remaining_sec`, `time_taken_sec`, `speed_bonus`, and `ability_after` in DB responses.
+  1. Diagnostic Quiz Generation across all topics: verified 5 questions covering all 5 difficulty levels (1–5) for DSA, DBMS, OS, CN, and Mixed.
+  2. Diagnostic Ability Calculation: verified 0/5 (20.0), 1/5 (32.0), 2/5 (43.0), 3/5 (55.0), 4/5 (72.0), 5/5 (85.0).
+  3. Self-Assessment Prior Shrinkage: verified novice (42.4), beginner (46.2), intermediate (50.0), proficient (53.8), advanced (57.7).
+  4. Skipped Self-Assessment: verified graceful shrinkage toward population mean (62.8 from 65.0).
+  5. Returning Student Recalibration: combined diagnostic (60.0), self-rating (65.0), and historical ability (75.0) into calibrated prior (66.2).
+  6. Server Action Execution: verified server-authoritative scoring of diagnostic items and starting ability creation.
+  7. Main Session Separation: verified diagnostic questions do not count towards requested question count and are not repeated in the main adaptive test.
 
 ### Known Limitations
-- Collective question calibration from aggregate student responses across multiple sessions belongs to Phase 5.10 / IRT calibration.
+- Collective question calibration from aggregate student responses across multiple sessions belongs to Phase 5.11 / IRT calibration.
 - AI narrative generation belongs to Phase 6.
 
 ### Next Planned Phase

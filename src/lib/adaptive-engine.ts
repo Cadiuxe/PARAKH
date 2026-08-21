@@ -260,3 +260,133 @@ export function questionScore(
   const bonus = calculateSpeedBonus(correct, remainingTime, totalTime);
   return { base: BASE_CORRECT_SCORE, bonus, total: BASE_CORRECT_SCORE + bonus };
 }
+
+// ─── Pre-Assessment / Ability Prior (Phase 5.10) ──────────────────────────────
+
+export type SelfAssessmentTier =
+  | "novice"
+  | "beginner"
+  | "intermediate"
+  | "proficient"
+  | "advanced";
+
+export const SELF_ASSESSMENT_ANCHORS: Record<SelfAssessmentTier, number> = {
+  novice: 20.0,
+  beginner: 35.0,
+  intermediate: 50.0,
+  proficient: 65.0,
+  advanced: 80.0,
+};
+
+/**
+ * Retrieve exactly 5 diagnostic questions with a deliberate difficulty spread (Levels 1–5).
+ *
+ * @param topic "DSA" | "DBMS" | "OS" | "CN" | "Mixed"
+ * @param questionBank Optional pool override
+ * @returns Array of exactly 5 diagnostic questions
+ */
+export function getDiagnosticQuestions(
+  topic: string,
+  questionBank: AssessmentQuestion[] = QUESTION_BANK
+): AssessmentQuestion[] {
+  const levels = [1, 2, 3, 4, 5];
+  const diagnostic: AssessmentQuestion[] = [];
+  const used = new Set<string>();
+
+  if (topic === "Mixed") {
+    // Spread across the 4 core topics and 5 levels: DSA(L1), DBMS(L2), OS(L3), CN(L4), and mixed L5
+    const mixedSpecs = [
+      { topic: "DSA", level: 1 },
+      { topic: "DBMS", level: 2 },
+      { topic: "OS", level: 3 },
+      { topic: "CN", level: 4 },
+      { topic: "DSA", level: 5 },
+    ];
+    for (const spec of mixedSpecs) {
+      const match =
+        questionBank.find(
+          (q) => !used.has(q.id) && q.topic === spec.topic && q.difficultyLevel === spec.level
+        ) || questionBank.find((q) => !used.has(q.id) && q.difficultyLevel === spec.level);
+      if (match) {
+        used.add(match.id);
+        diagnostic.push(match);
+      }
+    }
+  } else {
+    // Single topic: pick 1 question per difficulty level (1 to 5)
+    for (const lvl of levels) {
+      const match =
+        questionBank.find(
+          (q) => !used.has(q.id) && q.topic === topic && q.difficultyLevel === lvl
+        ) || questionBank.find((q) => !used.has(q.id) && q.topic === topic);
+      if (match) {
+        used.add(match.id);
+        diagnostic.push(match);
+      }
+    }
+  }
+
+  return diagnostic;
+}
+
+/**
+ * Calculate diagnostic ability from the 5 diagnostic question results.
+ *
+ * @param results Array of correctness and difficultyScore for the 5 diagnostic items
+ * @returns Diagnostic ability estimate (20.0–85.0)
+ */
+export function calculateDiagnosticAbility(
+  results: Array<{ isCorrect: boolean; difficultyScore: number }>
+): number {
+  if (results.length === 0) return INITIAL_ABILITY;
+
+  const correctCount = results.filter((r) => r.isCorrect).length;
+  // Discrete base calibration anchors
+  const baseAnchors = [20.0, 35.0, 45.0, 55.0, 70.0, 85.0];
+  let baseAbility = baseAnchors[Math.min(correctCount, 5)];
+
+  // Fine-tune with difficulties of questions answered correctly
+  if (correctCount > 0 && correctCount < 5) {
+    const avgCorrectDiff =
+      results.filter((r) => r.isCorrect).reduce((sum, r) => sum + r.difficultyScore, 0) /
+      correctCount;
+    // Slight adjustment (+/- up to 3 points) based on difficulty of items solved
+    baseAbility += Math.max(-3, Math.min(3, (avgCorrectDiff - 50) * 0.1));
+  }
+
+  return Math.round(Math.max(15, Math.min(88, baseAbility)) * 10) / 10;
+}
+
+/**
+ * Calculate the overall ability prior by combining diagnostic evidence, optional self-assessment,
+ * historical ability, and shrinkage toward the 50.0 baseline.
+ *
+ * @param params Object containing diagnosticAbility, optional selfAssessmentTier, and optional historicalAbility
+ * @returns Calibrated starting ability on [15, 88] rounded to 1 decimal place
+ */
+export function calculateAbilityPrior(params: {
+  diagnosticAbility: number;
+  selfAssessmentTier?: string | null;
+  historicalAbility?: number | null;
+}): number {
+  const { diagnosticAbility, selfAssessmentTier, historicalAbility } = params;
+
+  // 1. Incorporate optional self-assessment
+  let prior = diagnosticAbility;
+  if (selfAssessmentTier && selfAssessmentTier in SELF_ASSESSMENT_ANCHORS) {
+    const anchor = SELF_ASSESSMENT_ANCHORS[selfAssessmentTier as SelfAssessmentTier];
+    // Weight diagnostic evidence 70%, self-assessment 30%
+    prior = 0.7 * diagnosticAbility + 0.3 * anchor;
+  }
+
+  // 2. Incorporate historical ability if returning student
+  if (historicalAbility !== undefined && historicalAbility !== null && !isNaN(historicalAbility)) {
+    // Dynamic recalibration: 65% diagnostic evidence, 35% historical ability
+    prior = 0.65 * prior + 0.35 * historicalAbility;
+  } else {
+    // Moderate Bayesian shrinkage toward population baseline 50.0
+    prior = 0.85 * prior + 0.15 * INITIAL_ABILITY;
+  }
+
+  return Math.round(Math.max(15, Math.min(88, prior)) * 10) / 10;
+}
