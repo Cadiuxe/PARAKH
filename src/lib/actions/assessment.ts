@@ -117,7 +117,7 @@ export async function startAssessmentSession(
 
   // Load pool and select first question on server
   const pool = await fetchApprovedQuestions(topicFilter);
-  const firstQuestion = selectNextQuestion(INITIAL_ABILITY, new Set(), topicFilter);
+  const firstQuestion = selectNextQuestion(INITIAL_ABILITY, new Set(), topicFilter, pool);
 
   if (!firstQuestion) {
     return { success: false, error: "No questions available for the selected topic." };
@@ -173,6 +173,7 @@ export interface CompletedSessionSummary {
     subtopic: string;
     difficultyLevel: number;
     difficultyLabel: string;
+    difficultyScore: number;
     options: string[];
     selectedIndex: number;
     correctOptionIndex: number;
@@ -286,6 +287,7 @@ export async function submitQuestionAnswer(params: {
       question_order: previousResponses.length + 1,
       topic_code: question.topic,
       difficulty_level: question.difficultyLevel,
+      difficulty_score: question.difficultyScore,
       selected_option_index: selectedOptionIndex,
       is_correct: isCorrect,
       time_remaining_sec: clampedTimeRemaining,
@@ -317,7 +319,8 @@ export async function submitQuestionAnswer(params: {
   if (!isCompleted) {
     // 5. Select next question adaptively on server
     const usedIds = new Set(allResponses.map((r) => r.question_id));
-    const nextQuestion = selectNextQuestion(abilityAfter, usedIds, session.topic_filter);
+    const pool = await fetchApprovedQuestions(session.topic_filter);
+    const nextQuestion = selectNextQuestion(abilityAfter, usedIds, session.topic_filter, pool);
 
     if (nextQuestion) {
       return {
@@ -375,6 +378,7 @@ export async function submitQuestionAnswer(params: {
         subtopic: qDetails.subtopic,
         difficultyLevel: qDetails.difficultyLevel,
         difficultyLabel: qDetails.difficultyLabel,
+        difficultyScore: qDetails.difficultyScore,
         options: qDetails.options,
         selectedIndex: resp.selected_option_index,
         correctOptionIndex: qDetails.correctOptionIndex,
@@ -431,6 +435,7 @@ export type ActiveSessionResult =
         subtopic: string;
         difficultyLevel: number;
         difficultyLabel: string;
+        difficultyScore: number;
         options: string[];
         selectedIndex: number;
         correctOptionIndex: number;
@@ -481,6 +486,7 @@ export async function getActiveAssessmentSession(): Promise<ActiveSessionResult>
         subtopic: qDetails.subtopic,
         difficultyLevel: qDetails.difficultyLevel,
         difficultyLabel: qDetails.difficultyLabel,
+        difficultyScore: qDetails.difficultyScore,
         options: qDetails.options,
         selectedIndex: resp.selected_option_index,
         correctOptionIndex: qDetails.correctOptionIndex,
@@ -497,10 +503,12 @@ export async function getActiveAssessmentSession(): Promise<ActiveSessionResult>
   }
 
   if (responses.length < activeSession.requested_count) {
+    const pool = await fetchApprovedQuestions(activeSession.topic_filter);
     const nextQuestion = selectNextQuestion(
       currentAbility,
       usedIds,
-      activeSession.topic_filter
+      activeSession.topic_filter,
+      pool
     );
     if (nextQuestion) {
       return {

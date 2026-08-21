@@ -824,6 +824,7 @@ export default function AssessmentPage() {
                   subtopic: r.subtopic,
                   difficultyLevel: r.difficultyLevel,
                   difficultyLabel: r.difficultyLabel,
+                  difficultyScore: r.difficultyScore,
                   questionText: r.questionText,
                   options: r.options,
                   correctOptionIndex: r.correctOptionIndex,

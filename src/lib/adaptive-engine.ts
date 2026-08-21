@@ -1,22 +1,22 @@
 /**
  * PARAKH Adaptive Engine
  *
- * A simple, transparent rule-based adaptive algorithm.
+ * Rule-based adaptive algorithm using continuous difficulty targeting (Phase 5.6).
  *
  * Design goals:
- *  - Correct answer → ability increases
+ *  - Correct answer → ability increases (delta = level * 3)
  *  - Incorrect/timed-out answer → ability decreases
- *  - Next question difficulty tracks current ability
+ *  - Next question difficulty directly tracks current continuous ability (0–100)
  *  - No question repeats within one session
  *  - Topic filter is respected
  *
- * Ability is on a 0–100 scale.
- * Difficulty levels map as follows:
- *   1 (Easy)      → ability 0–30
- *   2 (Easy+)     → ability 25–45
- *   3 (Medium)    → ability 40–65
- *   4 (Hard)      → ability 60–85
- *   5 (Very Hard) → ability 80–100
+ * Ability and difficulty are on a continuous 0–100 scale.
+ * Level centroids:
+ *   1 (Easy)      → 15.00
+ *   2 (Easy+)     → 30.00
+ *   3 (Medium)    → 50.00
+ *   4 (Hard)      → 70.00
+ *   5 (Very Hard) → 88.00
  */
 
 import { AssessmentQuestion, QUESTION_BANK } from "./mock-data";
@@ -32,6 +32,8 @@ export const BASE_CORRECT_SCORE = 100;  // base points for a correct answer
 
 /**
  * Update the estimated ability after answering a question.
+ *
+ * Preserved from Phase 1–5.5: delta = level * 3.
  *
  * @param ability   Current ability estimate (0–100)
  * @param correct   Whether the answer was correct
@@ -50,8 +52,17 @@ export function updateAbility(ability: number, correct: boolean, level: number):
 // ─── Target Difficulty ────────────────────────────────────────────────────────
 
 /**
- * Determine the target difficulty level for the next question
- * given the current ability estimate.
+ * Continuous target difficulty is directly the student's current ability score.
+ *
+ * @param ability Current ability estimate (0–100)
+ * @returns Target difficulty on 0–100 scale
+ */
+export function targetDifficultyScore(ability: number): number {
+  return Math.max(0, Math.min(100, ability));
+}
+
+/**
+ * Legacy discrete target difficulty level helper (kept for backward compatibility).
  */
 export function targetDifficulty(ability: number): number {
   if (ability < 30) return 1;
@@ -64,27 +75,32 @@ export function targetDifficulty(ability: number): number {
 // ─── Question Selection ───────────────────────────────────────────────────────
 
 /**
- * Select the next question adaptively.
+ * Select the next question adaptively using continuous difficulty targeting.
  *
  * Strategy:
  *  1. Filter by topic (or "Mixed" = all topics).
  *  2. Exclude already-used question IDs.
- *  3. Prefer questions at the target difficulty (based on current ability).
- *  4. Fall back to adjacent difficulties if no exact match is available.
- *  5. Return null if no question is available (pool exhausted).
+ *  3. Calculate distance between each question's difficultyScore (0–100) and current ability.
+ *  4. Find the closest difficulty distance available in the eligible pool.
+ *  5. Collect candidates within a tight proximity tolerance to balance deterministic difficulty
+ *     proximity with randomness among equally suitable items.
+ *  6. Select uniformly at random among top candidates.
+ *  7. Return null if no question is available (pool exhausted).
  *
- * @param ability    Current ability estimate
- * @param usedIds    Set of question IDs already used this session
- * @param topic      "Mixed" or a specific topic ("DSA", "DBMS", "OS", "CN")
- * @returns          The selected question or null
+ * @param ability      Current ability estimate (0–100)
+ * @param usedIds      Set of question IDs already used this session
+ * @param topic        "Mixed" or a specific topic ("DSA", "DBMS", "OS", "CN")
+ * @param questionBank Optional pool override (defaults to QUESTION_BANK)
+ * @returns            The selected question or null
  */
 export function selectNextQuestion(
   ability: number,
   usedIds: Set<string>,
-  topic: string
+  topic: string,
+  questionBank: AssessmentQuestion[] = QUESTION_BANK
 ): AssessmentQuestion | null {
   // 1. Build the eligible pool
-  const pool = QUESTION_BANK.filter((q) => {
+  const pool = questionBank.filter((q) => {
     if (usedIds.has(q.id)) return false;
     if (topic !== "Mixed" && q.topic !== topic) return false;
     return true;
@@ -92,29 +108,24 @@ export function selectNextQuestion(
 
   if (pool.length === 0) return null;
 
-  // 2. Determine target difficulty
-  const target = targetDifficulty(ability);
-
-  // 3. Try to find a question at the exact target difficulty
-  const exact = pool.filter((q) => q.difficultyLevel === target);
-  if (exact.length > 0) {
-    return exact[Math.floor(Math.random() * exact.length)];
-  }
-
-  // 4. Expand search by proximity (distance from target)
-  for (let delta = 1; delta <= 4; delta++) {
-    const adjacent = pool.filter(
-      (q) =>
-        q.difficultyLevel === target + delta ||
-        q.difficultyLevel === target - delta
-    );
-    if (adjacent.length > 0) {
-      return adjacent[Math.floor(Math.random() * adjacent.length)];
+  // 2. Find minimum distance to target continuous ability
+  const target = targetDifficultyScore(ability);
+  let minDistance = Infinity;
+  for (const q of pool) {
+    const dist = Math.abs(q.difficultyScore - target);
+    if (dist < minDistance) {
+      minDistance = dist;
     }
   }
 
-  // 5. No questions left — return null
-  return null;
+  // 3. Gather candidates that are closest to the target (within small tolerance)
+  const tolerance = 5;
+  const candidates = pool.filter(
+    (q) => Math.abs(q.difficultyScore - target) <= minDistance + tolerance
+  );
+
+  // 4. Randomly pick one among equally closest candidates
+  return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
 // ─── Speed Bonus ──────────────────────────────────────────────────────────────

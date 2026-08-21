@@ -11,7 +11,7 @@
 
 import { getSupabaseAdmin } from "./server-client";
 import type { QuestionRow, QuestionSafeRow } from "./types";
-import { QUESTION_BANK, AssessmentQuestion } from "../mock-data";
+import { QUESTION_BANK, AssessmentQuestion, getDifficultyScoreFromLevel } from "../mock-data";
 
 /**
  * Helper to convert AssessmentQuestion (from mock-data) to QuestionRow format if needed.
@@ -23,6 +23,7 @@ function mockToQuestionRow(q: AssessmentQuestion): QuestionRow {
     subtopic: q.subtopic,
     difficulty_level: q.difficultyLevel as 1 | 2 | 3 | 4 | 5,
     difficulty_label: q.difficultyLabel,
+    difficulty_score: q.difficultyScore ?? getDifficultyScoreFromLevel(q.difficultyLevel),
     question_text: q.questionText,
     options: q.options,
     correct_option_index: q.correctOptionIndex as 0 | 1 | 2 | 3,
@@ -51,6 +52,7 @@ export function toSafeQuestion(
       subtopic: q.subtopic,
       difficulty_level: q.difficultyLevel as 1 | 2 | 3 | 4 | 5,
       difficulty_label: q.difficultyLabel,
+      difficulty_score: q.difficultyScore,
       question_text: q.questionText,
       options: q.options,
     };
@@ -61,6 +63,7 @@ export function toSafeQuestion(
     subtopic: q.subtopic,
     difficulty_level: q.difficulty_level,
     difficulty_label: q.difficulty_label,
+    difficulty_score: q.difficulty_score,
     question_text: q.question_text,
     options: q.options,
   };
@@ -99,6 +102,10 @@ export async function fetchApprovedQuestions(
         subtopic: row.subtopic,
         difficultyLabel: row.difficulty_label,
         difficultyLevel: row.difficulty_level,
+        difficultyScore:
+          row.difficulty_score != null
+            ? Number(row.difficulty_score)
+            : getDifficultyScoreFromLevel(row.difficulty_level),
         questionText: row.question_text,
         options: row.options as string[],
         correctOptionIndex: row.correct_option_index,
@@ -138,6 +145,10 @@ export async function fetchQuestionById(
         subtopic: data.subtopic,
         difficultyLabel: data.difficulty_label,
         difficultyLevel: data.difficulty_level,
+        difficultyScore:
+          data.difficulty_score != null
+            ? Number(data.difficulty_score)
+            : getDifficultyScoreFromLevel(data.difficulty_level),
         questionText: data.question_text,
         options: data.options as string[],
         correctOptionIndex: data.correct_option_index,

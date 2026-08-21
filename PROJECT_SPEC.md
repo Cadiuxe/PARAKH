@@ -8,7 +8,7 @@
 
 ## Project Status
 
-**Current Checkpoint**: Phase 5.5 — Database-backed Student Results (Completed)
+**Current Checkpoint**: Phase 5.6 — Continuous Difficulty Model (Completed)
 
 ### Completed Milestones
 - **Phase 1 (Foundation)**: Next.js 16 App Router, Tailwind CSS, shadcn/ui, Lucide Icons, Framer Motion, Recharts, Geist typography.
@@ -33,37 +33,40 @@
   - `src/components/results/results-view.tsx` — Client Component receiving pre-fetched `SessionResult`. Zero localStorage reads. Session switching calls `getSessionResult()` via `useTransition`. Handles: valid session, no sessions, invalid ID, ownership violation, in-progress session.
   - `src/app/results/page.tsx` — converted to async Server Component. Reads `?id` from `searchParams`, calls `getSessionResult()` SSR.
   - All result values (score, accuracy, speed bonus, ability, questions, explanations, correct answers, session history, topic breakdown, chart data) come exclusively from the database.
+- **Phase 5.6 (Continuous Difficulty Model)**:
+  - `supabase/migrations/20240104000000_add_difficulty_score.sql` — added nullable `difficulty_score numeric(5,2)` to `questions` and `responses` with `CHECK (difficulty_score BETWEEN 0 AND 100)`. Backfilled existing 60 questions with prototype level centroids (Level 1: 15.00, Level 2: 30.00, Level 3: 50.00, Level 4: 70.00, Level 5: 88.00).
+  - `src/lib/db/types.ts` — added `difficulty_score` to `QuestionRow`, `QuestionSafeRow`, `ResponseRow`, and `ResponseInsert`.
+  - `src/lib/mock-data.ts` — added `difficultyScore: number` to `AssessmentQuestion` and mapped `QUESTION_BANK` with continuous centroid difficulty values for all 60 prototype items.
+  - `src/lib/db/questions.ts` — updated `fetchApprovedQuestions`, `fetchQuestionById`, `mockToQuestionRow`, and `toSafeQuestion` to map and preserve `difficulty_score`.
+  - `src/lib/db/responses.ts` — updated `insertResponse` to persist `difficulty_score`.
+  - `src/lib/adaptive-engine.ts` — updated `selectNextQuestion` to target student continuous ability (0–100) directly using distance minimization and proximity candidate selection. Preserved `updateAbility` formula (`delta = level * 3`) unchanged.
+  - `src/lib/actions/assessment.ts` — passed `difficultyScore` into response persistence, session completion summaries, and reconnect data.
 
-### Files Changed in Phase 5.4
-- `src/lib/actions/assessment.ts` (exported `getAuthenticatedStudent`)
-- `src/lib/actions/dashboard.ts` (NEW — `getStudentDashboardData()`)
-- `src/lib/dashboard-context.tsx` (NEW — `DashboardProvider`, `useDashboard()`)
-- `src/app/dashboard/page.tsx` (async Server Component with `DashboardProvider`)
-- `src/components/dashboard/welcome-section.tsx` → `useDashboard()`
-- `src/components/dashboard/proficiency-card.tsx` → `useDashboard()`
-- `src/components/dashboard/ability-chart.tsx` → `useDashboard()`
-- `src/components/dashboard/insights-section.tsx` → `useDashboard()`
-- `src/components/dashboard/topic-cards.tsx` → `useDashboard()`
-- `src/components/dashboard/recent-assessments.tsx` → `useDashboard()`
+### Files Changed in Phase 5.6
+- `supabase/migrations/20240104000000_add_difficulty_score.sql` (NEW — database migration for continuous difficulty score)
+- `src/lib/db/types.ts` (added `difficulty_score` across question and response types)
+- `src/lib/mock-data.ts` (added `difficultyScore` to `AssessmentQuestion` and populated `QUESTION_BANK`)
+- `src/lib/db/questions.ts` (mapped `difficulty_score` in question query/conversion functions)
+- `src/lib/db/responses.ts` (persisted `difficulty_score` in response insertions)
+- `src/lib/adaptive-engine.ts` (continuous difficulty targeting in `selectNextQuestion`)
+- `src/lib/actions/assessment.ts` (passed `difficulty_score` through assessment session flow)
+- `src/app/assessment/page.tsx` (updated local storage result mapping type compatibility)
 
-### Files Changed in Phase 5.5
-- `src/lib/actions/results.ts` (NEW — `getSessionResult()`)
-- `src/components/results/results-view.tsx` (NEW — Client Component for results UI)
-- `src/app/results/page.tsx` (async Server Component)
-
-### Tests Performed (Phase 5.4 & 5.5)
-- `npm run build`: Production build and TypeScript validation passed with 0 errors after each phase.
-- `/dashboard` and `/results` both render as `ƒ (Dynamic)` (server-rendered on demand) in the build manifest.
-- All dashboard components verified to consume `useDashboard()` context; zero localStorage reads remaining for assessment stats.
-- Results page: all result values sourced from DB; `getSessionResult()` server action enforces ownership (student_id match) and status (completed-only) before returning full question details.
+### Tests Performed (Phase 5.6)
+- `npm run build`: Production build and TypeScript validation passed with 0 errors.
+- Automated Test Suite:
+  1. Validated all 60 questions have valid `difficultyScore` matching their 1–5 level mapping centroids {1: 15, 2: 30, 3: 50, 4: 70, 5: 88}.
+  2. Validated continuous difficulty targeting at ability=50 (selected score 50), ability=75 (selected score 70/88), ability=10 (selected score 15), and level exhaustion fallback.
+  3. Validated `updateAbility` preservation (`50 + 9 = 59`, `59 - 12 = 47`).
+  4. Tested multi-question assessment session execution via Server Actions and verified `difficulty_score` and `difficulty_level` are both persisted in `responses`.
 
 ### Known Limitations
-- Continuous psychometrics (Rasch / 2PL IRT model) and continuous difficulty scaling are intentionally deferred to following phases.
-- Question bank currently uses seeded curated items; AI question generation via Gemini belongs to Phase 6.
-- Results page session switching re-invokes the server action client-side via `useTransition` — no URL update occurs on session switch (navigating to `?id=X` directly is fully supported).
+- Empirical difficulty calibration from live student response data is deferred to Phase 5.9 / IRT.
+- Item exposure weighting (`times_used`) and weak-topic weighting are deferred to Phase 5.7.
+- Response-time difficulty/ability adjustments are deferred to Phase 5.8.
 
 ### Next Planned Phase
-- **Phase 6**: Gemini AI integration — performance analysis narrative, AI question generation pipeline, explanation enhancement.
+- **Phase 5.7**: Advanced Adaptive Selection & Exposure Control (topic weakness probability weighting and item exposure balancing).
 
 ---
 

@@ -30,12 +30,25 @@ export interface AbilityDataPoint {
   correct: boolean;
 }
 
+export const DIFFICULTY_LEVEL_TO_SCORE: Record<number, number> = {
+  1: 15,
+  2: 30,
+  3: 50,
+  4: 70,
+  5: 88,
+};
+
+export function getDifficultyScoreFromLevel(level: number): number {
+  return DIFFICULTY_LEVEL_TO_SCORE[level] ?? 50;
+}
+
 export interface AssessmentQuestion {
   id: string;
   topic: string;         // "DSA" | "DBMS" | "OS" | "CN"
   subtopic: string;
   difficultyLabel: string;
   difficultyLevel: number; // 1–5
+  difficultyScore: number; // 0–100 continuous score
   questionText: string;
   options: string[];
   correctOptionIndex: number;
@@ -200,9 +213,9 @@ export const MOCK_AREAS_TO_IMPROVE = [
   },
 ];
 
-// ─── Question Bank (60 questions across DSA/DBMS/OS/CN, difficulty 1–5, 15 per topic) ──────
+// ─── Raw Question Bank (60 questions across DSA/DBMS/OS/CN, difficulty 1–5, 15 per topic) ──
 
-export const QUESTION_BANK: AssessmentQuestion[] = [
+const RAW_QUESTION_BANK: Array<Omit<AssessmentQuestion, "difficultyScore">> = [
   // ── DSA (15 questions: 3 per difficulty level) ────────────────────────────
   {
     id: "dsa-1",
@@ -961,6 +974,12 @@ export const QUESTION_BANK: AssessmentQuestion[] = [
     explanation: "BGP is a path-vector protocol that prepends its Autonomous System (AS) number to the AS_PATH attribute. If a router receives an update containing its own AS number in AS_PATH, it discards it to prevent loops.",
   },
 ];
+
+// Exported question bank with continuous difficultyScore (0–100) populated for all 60 questions
+export const QUESTION_BANK: AssessmentQuestion[] = RAW_QUESTION_BANK.map((q) => ({
+  ...q,
+  difficultyScore: getDifficultyScoreFromLevel(q.difficultyLevel),
+}));
 
 // ─── Admin Question Queue (for admin review page) ─────────────────────────────
 

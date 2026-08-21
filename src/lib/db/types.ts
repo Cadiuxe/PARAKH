@@ -42,6 +42,7 @@ export type QuestionRow = {
   subtopic: string;
   difficulty_level: 1 | 2 | 3 | 4 | 5;
   difficulty_label: string;
+  difficulty_score: number | null; // 0–100 continuous score
   question_text: string;
   options: string[]; // jsonb — array of 4 strings
   correct_option_index: 0 | 1 | 2 | 3;
@@ -67,6 +68,7 @@ export type QuestionSafeRow = {
   subtopic: string;
   difficulty_level: 1 | 2 | 3 | 4 | 5;
   difficulty_label: string;
+  difficulty_score: number | null;
   question_text: string;
   options: string[];
 };
@@ -96,6 +98,7 @@ export type ResponseRow = {
   question_order: number;
   topic_code: string; // denormalized at time of attempt
   difficulty_level: number; // denormalized at time of attempt
+  difficulty_score: number | null; // continuous difficulty score (0–100)
   selected_option_index: number; // -1 = timeout, 0–3 = selected
   is_correct: boolean;
   time_remaining_sec: number;
@@ -164,6 +167,7 @@ export type ResponseInsert = {
   question_order: number;
   topic_code: string;
   difficulty_level: number;
+  difficulty_score?: number | null;
   selected_option_index: number;
   is_correct: boolean;
   time_remaining_sec: number;

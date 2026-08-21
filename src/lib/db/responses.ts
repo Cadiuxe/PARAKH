@@ -33,6 +33,7 @@ export async function insertResponse(
     question_order: response.question_order,
     topic_code: response.topic_code,
     difficulty_level: response.difficulty_level,
+    difficulty_score: response.difficulty_score ?? null,
     selected_option_index: response.selected_option_index,
     is_correct: response.is_correct,
     time_remaining_sec: response.time_remaining_sec,
