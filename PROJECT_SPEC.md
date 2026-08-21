@@ -8,7 +8,7 @@
 
 ## Project Status
 
-**Current Checkpoint**: Phase 5.6 — Continuous Difficulty Model (Completed)
+**Current Checkpoint**: Phase 5.7 — Continuous Ability Estimation (Completed)
 
 ### Completed Milestones
 - **Phase 1 (Foundation)**: Next.js 16 App Router, Tailwind CSS, shadcn/ui, Lucide Icons, Framer Motion, Recharts, Geist typography.
@@ -39,34 +39,38 @@
   - `src/lib/mock-data.ts` — added `difficultyScore: number` to `AssessmentQuestion` and mapped `QUESTION_BANK` with continuous centroid difficulty values for all 60 prototype items.
   - `src/lib/db/questions.ts` — updated `fetchApprovedQuestions`, `fetchQuestionById`, `mockToQuestionRow`, and `toSafeQuestion` to map and preserve `difficulty_score`.
   - `src/lib/db/responses.ts` — updated `insertResponse` to persist `difficulty_score`.
-  - `src/lib/adaptive-engine.ts` — updated `selectNextQuestion` to target student continuous ability (0–100) directly using distance minimization and proximity candidate selection. Preserved `updateAbility` formula (`delta = level * 3`) unchanged.
+  - `src/lib/adaptive-engine.ts` — updated `selectNextQuestion` to target student continuous ability (0–100) directly using distance minimization and proximity candidate selection.
   - `src/lib/actions/assessment.ts` — passed `difficultyScore` into response persistence, session completion summaries, and reconnect data.
+- **Phase 5.7 (Continuous Ability Estimation)**:
+  - Implemented continuous mathematical ability updating in `src/lib/adaptive-engine.ts`:
+    $$E = \frac{1}{1 + 10^{-(\theta - d) / 40}}$$
+    $$\Delta\theta = 15 \cdot (y - E)$$
+    $$\theta_{\text{next}} = \text{clamp}(\theta + \Delta\theta, 5, 100)$$
+  - Integrated `question.difficultyScore` into `submitQuestionAnswer` server action in `src/lib/actions/assessment.ts`.
+  - Maintained complete backward compatibility for legacy integer difficulty inputs.
 
-### Files Changed in Phase 5.6
-- `supabase/migrations/20240104000000_add_difficulty_score.sql` (NEW — database migration for continuous difficulty score)
-- `src/lib/db/types.ts` (added `difficulty_score` across question and response types)
-- `src/lib/mock-data.ts` (added `difficultyScore` to `AssessmentQuestion` and populated `QUESTION_BANK`)
-- `src/lib/db/questions.ts` (mapped `difficulty_score` in question query/conversion functions)
-- `src/lib/db/responses.ts` (persisted `difficulty_score` in response insertions)
-- `src/lib/adaptive-engine.ts` (continuous difficulty targeting in `selectNextQuestion`)
-- `src/lib/actions/assessment.ts` (passed `difficulty_score` through assessment session flow)
-- `src/app/assessment/page.tsx` (updated local storage result mapping type compatibility)
+### Files Changed in Phase 5.7
+- `src/lib/adaptive-engine.ts` (implemented continuous ability estimator formula with dynamic step sizing)
+- `src/lib/actions/assessment.ts` (passed continuous `question.difficultyScore` into `updateAbility`)
+- `PROJECT_SPEC.md` (documented mathematical formula, expected behavior, boundary behavior, and limitations)
 
-### Tests Performed (Phase 5.6)
+### Tests Performed (Phase 5.7)
 - `npm run build`: Production build and TypeScript validation passed with 0 errors.
-- Automated Test Suite:
-  1. Validated all 60 questions have valid `difficultyScore` matching their 1–5 level mapping centroids {1: 15, 2: 30, 3: 50, 4: 70, 5: 88}.
-  2. Validated continuous difficulty targeting at ability=50 (selected score 50), ability=75 (selected score 70/88), ability=10 (selected score 15), and level exhaustion fallback.
-  3. Validated `updateAbility` preservation (`50 + 9 = 59`, `59 - 12 = 47`).
-  4. Tested multi-question assessment session execution via Server Actions and verified `difficulty_score` and `difficulty_level` are both persisted in `responses`.
+- Deterministic Validation Suite:
+  1. Equal difficulty test ($\theta=50, d=50$): Correct $= 57.5 (+7.5)$, Incorrect $= 42.5 (-7.5)$.
+  2. Stretch item test ($\theta=30, d=88$): Correct $= 44.5 (+14.5)$, Incorrect $= 29.5 (-0.5)$.
+  3. Easy item test ($\theta=80, d=15$): Correct $= 80.3 (+0.3)$, Incorrect $= 65.3 (-14.7)$.
+  4. Minimum boundary test ($\theta=5, d=15$): Incorrect clamped at $5.0$, Correct increases to $14.6$.
+  5. Maximum boundary test ($\theta=98, d=88$): Correct clamped at $100.0$, Incorrect decreases to $88.4$.
+  6. End-to-end multi-step assessment lifecycle test via Server Actions: verified continuous ability transitions and response persistence.
+  7. Idempotent duplicate submission protection verified.
 
 ### Known Limitations
-- Empirical difficulty calibration from live student response data is deferred to Phase 5.9 / IRT.
-- Item exposure weighting (`times_used`) and weak-topic weighting are deferred to Phase 5.7.
-- Response-time difficulty/ability adjustments are deferred to Phase 5.8.
+- Response time weighting in ability updates is deferred to Phase 5.8.
+- Question calibration from aggregate student responses is deferred to Phase 5.9.
 
 ### Next Planned Phase
-- **Phase 5.7**: Advanced Adaptive Selection & Exposure Control (topic weakness probability weighting and item exposure balancing).
+- **Phase 5.8**: Response Time & Speed-Weighted Psychometric Updates.
 
 ---
 

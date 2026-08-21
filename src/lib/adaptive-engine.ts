@@ -1,11 +1,13 @@
 /**
  * PARAKH Adaptive Engine
  *
- * Rule-based adaptive algorithm using continuous difficulty targeting (Phase 5.6).
+ * Adaptive testing algorithm using continuous difficulty targeting (Phase 5.6)
+ * and continuous residual-based ability estimation (Phase 5.7).
  *
  * Design goals:
- *  - Correct answer → ability increases (delta = level * 3)
- *  - Incorrect/timed-out answer → ability decreases
+ *  - Correct answer → ability increases dynamically based on item difficulty: delta = K * (1 - E)
+ *  - Incorrect/timed-out answer → ability decreases: delta = K * (0 - E)
+ *  - Expected probability E = 1 / (1 + 10^(-(ability - difficultyScore) / 40))
  *  - Next question difficulty directly tracks current continuous ability (0–100)
  *  - No question repeats within one session
  *  - Topic filter is respected
@@ -19,7 +21,7 @@
  *   5 (Very Hard) → 88.00
  */
 
-import { AssessmentQuestion, QUESTION_BANK } from "./mock-data";
+import { AssessmentQuestion, QUESTION_BANK, getDifficultyScoreFromLevel } from "./mock-data";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -31,22 +33,51 @@ export const BASE_CORRECT_SCORE = 100;  // base points for a correct answer
 // ─── Ability Updates ──────────────────────────────────────────────────────────
 
 /**
- * Update the estimated ability after answering a question.
+ * Update the estimated ability after answering a question using continuous ability estimation (Phase 5.7).
  *
- * Preserved from Phase 1–5.5: delta = level * 3.
+ * Expected probability formula:
+ *   E = 1 / (1 + 10^(-(ability - difficultyScore) / 40))
  *
- * @param ability   Current ability estimate (0–100)
- * @param correct   Whether the answer was correct
- * @param level     Difficulty level of the question (1–5)
- * @returns New ability estimate clamped to [5, 100]
+ * Delta adjustment:
+ *   delta = K * (y - E), where K = 15 and y = 1 (correct) or 0 (incorrect)
+ *
+ * Properties:
+ *  - Correct on harder question (d > ability): larger reward (+7.5 to +14.5)
+ *  - Correct on easier question (d < ability): smaller reward (+0.5 to +7.5)
+ *  - Incorrect on easier question (d < ability): larger penalty (-7.5 to -14.5)
+ *  - Incorrect on harder question (d > ability): smaller penalty (-0.5 to -7.5)
+ *  - Matched question (d = ability): ±7.5
+ *
+ * @param ability              Current ability estimate (0–100)
+ * @param correct              Whether the answer was correct
+ * @param difficultyScoreOrLevel Question's continuous difficultyScore (0–100) or legacy level (1–5)
+ * @returns New continuous ability estimate clamped to [5, 100], rounded to 1 decimal place
  */
-export function updateAbility(ability: number, correct: boolean, level: number): number {
-  // How much the ability changes depends on question difficulty
-  // Correct on hard question = bigger reward; wrong on easy question = bigger penalty
-  const delta = level * 3; // e.g., level 3 → ±9, level 5 → ±15
+export function updateAbility(
+  ability: number,
+  correct: boolean,
+  difficultyScoreOrLevel: number
+): number {
+  // If a legacy integer difficulty level (1–5) is passed, map it to its continuous centroid
+  const difficultyScore =
+    difficultyScoreOrLevel >= 1 && difficultyScoreOrLevel <= 5 && Number.isInteger(difficultyScoreOrLevel)
+      ? getDifficultyScoreFromLevel(difficultyScoreOrLevel)
+      : difficultyScoreOrLevel;
 
-  const next = correct ? ability + delta : ability - delta;
-  return Math.max(5, Math.min(100, next));
+  // Expected performance probability based on ability-difficulty difference
+  const exponent = -(ability - difficultyScore) / 40;
+  const expected = 1 / (1 + Math.pow(10, exponent));
+
+  // Sensitivity constant K = 15
+  const K = 15;
+  const outcome = correct ? 1 : 0;
+  const delta = K * (outcome - expected);
+
+  const nextAbility = ability + delta;
+  const clamped = Math.max(5, Math.min(100, nextAbility));
+
+  // Round to 1 decimal place for clean persistence and presentation
+  return Math.round(clamped * 10) / 10;
 }
 
 // ─── Target Difficulty ────────────────────────────────────────────────────────
