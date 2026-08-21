@@ -8,7 +8,7 @@
 
 ## Project Status
 
-**Current Checkpoint**: Phase 5.3 — Assessment Persistence & Server Authority (Completed)
+**Current Checkpoint**: Phase 5.5 — Database-backed Student Results (Completed)
 
 ### Completed Milestones
 - **Phase 1 (Foundation)**: Next.js 16 App Router, Tailwind CSS, shadcn/ui, Lucide Icons, Framer Motion, Recharts, Geist typography.
@@ -20,34 +20,50 @@
   - **Security Sanitization**: Client receives `QuestionSafeRow` stripped of `correct_option_index` and `explanation`. Feedback is revealed only after server verification.
   - **Idempotency & Reconnect**: Safe duplicate submission guards; full support for session restoration on page refresh / reconnect (`getActiveAssessmentSession`).
   - **Schema Update**: `20240102000000_assessment_in_progress_status.sql` enabled `'in_progress'` status on `sessions`.
+- **Phase 5.4 (Database-backed Student Dashboard)**:
+  - `src/lib/actions/dashboard.ts` — `getStudentDashboardData()` server action aggregating sessions, responses, and ability_estimates over ALL completed sessions (no cap).
+  - `src/lib/dashboard-context.tsx` — `DashboardProvider` and `useDashboard()` context hook.
+  - `src/app/dashboard/page.tsx` — converted to async Server Component; data fetched SSR and passed as `initialData`.
+  - All 6 dashboard components converted from `getStoredAssessments()` to `useDashboard()`:
+    - `welcome-section.tsx`, `proficiency-card.tsx`, `ability-chart.tsx`, `insights-section.tsx`, `topic-cards.tsx`, `recent-assessments.tsx`
+  - Lifetime aggregate stats are never capped; Recent Assessments card displays 4 most recent.
+  - New-student empty states preserved.
+- **Phase 5.5 (Database-backed Student Results)**:
+  - `src/lib/actions/results.ts` — `getSessionResult(sessionId?)` server action. Authenticates student from SSR cookies, verifies session ownership (`student_id` match), checks `status === 'completed'`, fetches responses, fetches full question details including `correct_option_index` and `explanation` (server-only), assembles `SessionResultData`.
+  - `src/components/results/results-view.tsx` — Client Component receiving pre-fetched `SessionResult`. Zero localStorage reads. Session switching calls `getSessionResult()` via `useTransition`. Handles: valid session, no sessions, invalid ID, ownership violation, in-progress session.
+  - `src/app/results/page.tsx` — converted to async Server Component. Reads `?id` from `searchParams`, calls `getSessionResult()` SSR.
+  - All result values (score, accuracy, speed bonus, ability, questions, explanations, correct answers, session history, topic breakdown, chart data) come exclusively from the database.
 
-### Files & Schema Changed in Phase 5.3
-- `supabase/migrations/20240102000000_assessment_in_progress_status.sql` (in_progress session status migration)
-- `src/lib/db/types.ts` (updated SessionRow status & insert types)
-- `src/lib/db/questions.ts` (sanitized safe questions, server question retrieval)
-- `src/lib/db/sessions.ts` (session creation, active session lookup, server updates)
-- `src/lib/db/responses.ts` (response row insertion and session query)
-- `src/lib/db/ability.ts` (rolling per-topic ability estimates upsert)
-- `src/lib/actions/assessment.ts` (Next.js Server Actions layer for assessment lifecycle)
-- `src/app/assessment/page.tsx` (connected client UI to server actions, reconnect state, server feedback display)
+### Files Changed in Phase 5.4
+- `src/lib/actions/assessment.ts` (exported `getAuthenticatedStudent`)
+- `src/lib/actions/dashboard.ts` (NEW — `getStudentDashboardData()`)
+- `src/lib/dashboard-context.tsx` (NEW — `DashboardProvider`, `useDashboard()`)
+- `src/app/dashboard/page.tsx` (async Server Component with `DashboardProvider`)
+- `src/components/dashboard/welcome-section.tsx` → `useDashboard()`
+- `src/components/dashboard/proficiency-card.tsx` → `useDashboard()`
+- `src/components/dashboard/ability-chart.tsx` → `useDashboard()`
+- `src/components/dashboard/insights-section.tsx` → `useDashboard()`
+- `src/components/dashboard/topic-cards.tsx` → `useDashboard()`
+- `src/components/dashboard/recent-assessments.tsx` → `useDashboard()`
 
-### Tests Performed
-- `npm run build`: Production build and TypeScript validation passed with 0 errors.
-- Automated & Flow Tests (`scratch/test-assessment-flow.ts`):
-  1. Session creation with SSR auth identity verification.
-  2. Question sanitization security check (no answer key/explanation leakage).
-  3. Active session restoration on refresh/reconnect.
-  4. Server-evaluated answer scoring & speed bonus calculation.
-  5. Duplicate submission guard (idempotent result preservation).
-  6. Multi-question progression and session completion transition.
-  7. Active session cleanup verification.
+### Files Changed in Phase 5.5
+- `src/lib/actions/results.ts` (NEW — `getSessionResult()`)
+- `src/components/results/results-view.tsx` (NEW — Client Component for results UI)
+- `src/app/results/page.tsx` (async Server Component)
+
+### Tests Performed (Phase 5.4 & 5.5)
+- `npm run build`: Production build and TypeScript validation passed with 0 errors after each phase.
+- `/dashboard` and `/results` both render as `ƒ (Dynamic)` (server-rendered on demand) in the build manifest.
+- All dashboard components verified to consume `useDashboard()` context; zero localStorage reads remaining for assessment stats.
+- Results page: all result values sourced from DB; `getSessionResult()` server action enforces ownership (student_id match) and status (completed-only) before returning full question details.
 
 ### Known Limitations
 - Continuous psychometrics (Rasch / 2PL IRT model) and continuous difficulty scaling are intentionally deferred to following phases.
 - Question bank currently uses seeded curated items; AI question generation via Gemini belongs to Phase 6.
+- Results page session switching re-invokes the server action client-side via `useTransition` — no URL update occurs on session switch (navigating to `?id=X` directly is fully supported).
 
 ### Next Planned Phase
-- **Phase 5.4 / 5.5**: Database-backed Student Dashboard & Results Analytics (hydrating proficiency charts, history, and topic breakdown directly from Supabase `sessions`, `responses`, and `ability_estimates`).
+- **Phase 6**: Gemini AI integration — performance analysis narrative, AI question generation pipeline, explanation enhancement.
 
 ---
 
